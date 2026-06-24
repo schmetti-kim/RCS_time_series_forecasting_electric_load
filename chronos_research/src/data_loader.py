@@ -11,7 +11,7 @@ import pandas as pd
 from pathlib import Path
 
 from config import (
-    DATA_FILE, TIMESTAMP_COL, TARGET_COL,
+    DATA_DIR, TIMESTAMP_COL, TARGET_COL,
     WEATHER_COLS, CITY_TEMP_COLS, PREDICTION_LENGTH,
 )
 
@@ -39,7 +39,7 @@ CALENDAR_COLS = [
 
 # ── Main loader ────────────────────────────────────────────────────────────────
 
-def load_panama(path: Path = DATA_FILE) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_panama(path: Path = DATA_DIR / "raw" / "continuous_dataset.csv") -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Returns
     -------
