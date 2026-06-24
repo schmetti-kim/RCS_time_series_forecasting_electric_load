@@ -6,13 +6,13 @@ Change values here; everything else reads from this file.
 from pathlib import Path
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
-ROOT_DIR    = Path("/Users/darekar/Documents/panama/RCS_time_series_forecasting_electric_load/panama")
+ROOT_DIR    = Path(__file__).parent.parent  # Goes from src/ up to panama/
 DATA_DIR    = ROOT_DIR / "data"
 RESULTS_DIR = ROOT_DIR / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
 # ── Data ───────────────────────────────────────────────────────────────────────
-DATA_FILE   = DATA_DIR / "continuous_dataset.csv"   # Kaggle Panama dataset
+# DATA_FILE   = DATA_DIR / "continuous_dataset.csv"   # Kaggle Panama dataset
 TIMESTAMP_COL = "datetime"
 TARGET_COL    = "nat_demand"                        # national demand (MW)
 SERIES_ID     = "panama_national"
