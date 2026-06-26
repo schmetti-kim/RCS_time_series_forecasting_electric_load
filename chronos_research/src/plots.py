@@ -8,116 +8,125 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import seaborn as sns
 from pathlib import Path
+import scipy.stats as stats
+from config import RESULTS_DIR, TIMESTAMP_COLUMN, PREDICT_COLUMN
 
 sns.set_theme(style="whitegrid", palette="muted")
 
-
-# ── EDA ───────────────────────────────────────────────────────────────────────
-
-def plot_eda(df: pd.DataFrame, timestamp_col: str, target_col: str,
-             results_dir: Path):
-    fig, axes = plt.subplots(2, 1, figsize=(14, 6))
-
-    axes[0].plot(df[timestamp_col], df[target_col], lw=0.5, color="steelblue")
-    axes[0].set_title("Panama — National Electricity Demand (full series)", fontsize=12)
-    axes[0].set_ylabel("MW")
-
-    zoom = df.tail(24 * 14)
-    axes[1].plot(zoom[timestamp_col], zoom[target_col], lw=0.9, color="darkorange")
-    axes[1].set_title("Last 2 weeks (hourly detail)", fontsize=12)
-    axes[1].set_ylabel("MW")
-    axes[1].xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
-
-    plt.tight_layout()
-    out = results_dir / "eda_demand.png"
-    plt.savefig(out, dpi=150)
-    plt.close()
-    print(f"[plot]  {out}")
-
-
-# ── Forecast ──────────────────────────────────────────────────────────────────
-
-def plot_forecast(y_true: np.ndarray, y_pred: np.ndarray,
-                  title: str, filename: str, results_dir: Path,
-                  q_lo: np.ndarray = None, q_hi: np.ndarray = None,
-                  ensemble_std: np.ndarray = None):
+# ── Boxplot ────────────────────────────────────────────────────────────────────
+def plot_metrics_boxplots(merged_df):
     """
-    Plot actual vs. point forecast.
-    Optionally add a shaded prediction interval from either:
-      - quantile band  (q_lo, q_hi)   — S1, S2, S3
-      - ensemble spread (ensemble_std) — S4
+    Generates side-by-side boxplots for RMSE and MAPE comparing different datasets.
+    
+    Parameters:
+    merged_df (pd.DataFrame): The combined DataFrame containing 'dataset', 'rmse', and 'mape' columns.
     """
-    x = np.arange(len(y_true))
-    fig, ax = plt.subplots(figsize=(12, 4))
-
-    ax.plot(x, y_true,  label="Actual",           color="black",     lw=1.5)
-    ax.plot(x, y_pred,  label="Forecast (median)", color="steelblue", lw=1.5, ls="--")
-
-    if q_lo is not None and q_hi is not None:
-        ax.fill_between(x, q_lo, q_hi, alpha=0.25, color="steelblue", label="10–90 % PI")
-
-    if ensemble_std is not None:
-        ax.fill_between(x,
-                        y_pred - 2 * ensemble_std,
-                        y_pred + 2 * ensemble_std,
-                        alpha=0.25, color="purple", label="±2σ ensemble spread")
-
-    ax.set_title(title, fontsize=12)
-    ax.set_xlabel("Hour")
-    ax.set_ylabel("MW")
-    ax.legend()
+    # Create side-by-side subplots using plt.subplots to configure layout without .figure()
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    
+    # 1. Boxplot for RMSE
+    sns.boxplot(
+        data=merged_df, 
+        x='dataset', 
+        y='rmse', 
+        ax=axes[0], 
+        hue='dataset', 
+        palette='Set2', 
+        legend=False
+    )
+    axes[0].set_title('RMSE Distribution by Dataset')
+    axes[0].set_xlabel('Dataset')
+    axes[0].set_ylabel('RMSE')
+    
+    # 2. Boxplot for MAPE
+    sns.boxplot(
+        data=merged_df, 
+        x='dataset', 
+        y='mape', 
+        ax=axes[1], 
+        hue='dataset', 
+        palette='Set2', 
+        legend=False
+    )
+    axes[1].set_title('MAPE Distribution by Dataset')
+    axes[1].set_xlabel('Dataset')
+    axes[1].set_ylabel('MAPE (%)')
+    
+    # Automatically adjust spacing to prevent label truncations or overlaps
     plt.tight_layout()
-
-    out = results_dir / filename
-    plt.savefig(out, dpi=150)
+    plt.show()
+    
+    # Save the visualization to a file
+    plt.savefig(RESULTS_DIR / "metrics_boxplot.png")
+    print(f"Box plots successfully created and saved.")
     plt.close()
-    print(f"[plot]  {out}")
 
+# ── Distribution ───────────────────────────────────────────────────────────────
+def plot_distribution(df, columns):
+    """
+    Plots the distribution of specified columns using histograms
+    to help identify the distributional shape (Normal, Chi-sq, etc.).
+    
+    Parameters:
+    df (pd.DataFrame): The dataframe containing the data.
+    columns (str or list): Column name(s) to plot.
+    """
+    # Force columns to be a list if a single string is passed
+    if isinstance(columns, str):
+        columns = [columns]
+        
+    for col in columns:
+        # Create a figure 
+        plt.figure(figsize=(8, 5))
+        
+        # 1. Histogram + KDE (Kernel Density Estimate)
+        sns.histplot(df[col], kde=True, stat="density", color="royalblue", alpha=0.6)
+        plt.title(f'Histogram & Density of {col}')
+        plt.xlabel(col)
+        plt.ylabel('Density')
+        
+        plt.tight_layout()
+        plt.show()
 
-# ── STL decomposition ─────────────────────────────────────────────────────────
-
-def plot_stl(trend, seasonal, residual, original, results_dir: Path,
-             n_days: int = 30):
-    n = 24 * n_days
-    fig, axes = plt.subplots(4, 1, figsize=(14, 8), sharex=True)
-    for ax, data, label, color in zip(
-        axes,
-        [original[-n:], trend[-n:], seasonal[-n:], residual[-n:]],
-        ["Original", "Trend", "Seasonal (24 h)", "Residual"],
-        ["black", "steelblue", "darkorange", "green"],
-    ):
-        ax.plot(data, color=color, lw=0.8)
-        ax.set_ylabel(label)
-    axes[0].set_title(f"STL Decomposition — last {n_days} days", fontsize=12)
+# ── Time Series ────────────────────────────────────────────────────────────────
+def plot_time_series(data1_df, data2_matrix, save_path):
+    """
+    Plots the 'predictions' column from data1 and the values from data2 against the timestamps.
+    
+    Parameters:
+    - data1_df (pd.DataFrame): DataFrame containing 'timestamp' and 'predictions' columns.
+    - data2_matrix (list of lists or np.ndarray): 2D array of shape (N_DAY, 24).
+    - save_path (str): File name to save the generated plot.
+    """
+    # 1. Convert the 2D matrix (N_DAY days x 24 hours) into a flat 1D array
+    flat_data2 = np.array(data2_matrix).flatten()
+    
+    # 2. Ensure timestamps are in datetime format for clean plotting
+    timestamps = pd.to_datetime(data1_df[TIMESTAMP_COLUMN])
+    predictions = data1_df[PREDICT_COLUMN]
+    
+    # 3. Create the plot using subplots
+    fig, ax = plt.subplots(figsize=(14, 6))
+    
+    # Plot both series
+    ax.plot(timestamps, predictions, label='Predictions', color='#1f77b4', linewidth=1.5)
+    ax.plot(timestamps, flat_data2, label='True Values', color='#ff7f0e', linewidth=1.5, alpha=0.8)
+    
+    # Formatting labels and title
+    ax.set_title('Electric Load Time Series Comparison: Predictions vs True Values', fontsize=14, fontweight='bold', pad=15)
+    ax.set_xlabel('Timestamp', fontsize=12)
+    ax.set_ylabel('[MW]', fontsize=12)
+    
+    # Grid and legend
+    ax.grid(True, linestyle='--', alpha=0.5)
+    ax.legend(fontsize=11, loc='upper right')
+    
+    # Ensure dates on the x-axis are readable and non-overlapping
+    plt.xticks(rotation=30, ha='right')
     plt.tight_layout()
-    out = results_dir / "s3b_stl_decomposition.png"
-    plt.savefig(out, dpi=150)
+    plt.show()
+    
+    # Save the figure
+    plt.savefig(save_path, dpi=300)
     plt.close()
-    print(f"[plot]  {out}")
-
-
-# ── Summary bar chart ─────────────────────────────────────────────────────────
-
-def plot_summary(results_df: pd.DataFrame, results_dir: Path):
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-    colors = sns.color_palette("muted", len(results_df))
-
-    for ax, metric, unit in zip(axes,
-                                 ["MAPE_%", "RMSE_MW"],
-                                 ["%", "MW"]):
-        bars = ax.bar(results_df["scenario"], results_df[metric],
-                      color=colors, edgecolor="white")
-        ax.set_title(f"{metric.split('_')[0]} by Scenario — Panama", fontsize=12)
-        ax.set_ylabel(f"{metric.split('_')[0]} ({unit})")
-        ax.tick_params(axis="x", rotation=35)
-        for bar, val in zip(bars, results_df[metric]):
-            ax.text(bar.get_x() + bar.get_width() / 2,
-                    bar.get_height() * 1.01,
-                    f"{val:.2f}", ha="center", va="bottom", fontsize=8)
-
-    plt.suptitle("Chronos-2 Adaptation Strategies — Panama", fontsize=13, y=1.01)
-    plt.tight_layout()
-    out = results_dir / "scenario_comparison.png"
-    plt.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"[plot]  {out}")
+    print(f"Plot successfully created and saved to '{save_path}'.")

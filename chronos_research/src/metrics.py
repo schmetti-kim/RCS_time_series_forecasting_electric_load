@@ -1,5 +1,5 @@
 """
-metrics.py — Evaluation metrics as required by the Exposé (Nti et al. 2020).
+metrics.py — Evaluation metrics.
 """
 
 import numpy as np
@@ -7,39 +7,66 @@ import pandas as pd
 from sklearn.metrics import mean_squared_error
 from pathlib import Path
 
+def calculate_metrics(y_true, y_pred):
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
 
-def mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Mean Absolute Percentage Error (%)."""
-    y_true, y_pred = np.asarray(y_true, float), np.asarray(y_pred, float)
-    mask = y_true != 0
-    return float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100)
+    # Root Mean Squared Error
+    rmse = np.sqrt(np.mean((y_true - y_pred) ** 2))
 
+    # Mean Absolute Percentage Error
+    mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
 
-def rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Root Mean Squared Error (MW)."""
-    return float(np.sqrt(mean_squared_error(y_true, y_pred)))
+    return rmse, mape
 
+# def save_results(results: list[dict], results_dir: Path, dataset: str = "Panama"):
+#     """Save CSV + JSON (JSON used by teammates for RQ2 cross-dataset merge)."""
+#     df = pd.DataFrame(results)
 
-def evaluate(y_true: np.ndarray, y_pred: np.ndarray, label: str) -> dict:
-    m = mape(y_true, y_pred)
-    r = rmse(y_true, y_pred)
-    print(f"  [{label}]  MAPE = {m:.4f}%   RMSE = {r:.4f} MW")
-    return {"scenario": label, "MAPE_%": round(m, 6), "RMSE_MW": round(r, 6)}
+#     csv_path  = results_dir / f"{dataset.lower()}_results.csv"
+#     json_path = results_dir / f"{dataset.lower()}_results_rq2.json"
 
+#     df.to_csv(csv_path, index=False)
 
-def save_results(results: list[dict], results_dir: Path, dataset: str = "Panama"):
-    """Save CSV + JSON (JSON used by teammates for RQ2 cross-dataset merge)."""
-    df = pd.DataFrame(results)
+#     # JSON export with dataset label — team merges all 3 datasets here
+#     df.insert(0, "dataset", dataset)
+#     df.to_json(json_path, orient="records", indent=2)
 
-    csv_path  = results_dir / f"{dataset.lower()}_results.csv"
-    json_path = results_dir / f"{dataset.lower()}_results_rq2.json"
+#     print(f"\n[saved]  {csv_path}")
+#     print(f"[saved]  {json_path}  ← share with Kim & Saxena for RQ2")
+#     return df
 
-    df.to_csv(csv_path, index=False)
+def compute_summary_statistics(df, columns):
+    """
+    Computes summary statistics for evaluation metrics.
+    
+    Parameters:
+    df (pd.DataFrame): The evaluation dataframe containing metrics.
+    columns (list): List of columns to compute statistics for.
+    
+    Returns:
+    pd.DataFrame: A formatted dataframe containing summary statistics.
+    """
+    # Force columns to be a list if a single string is passed
+    if isinstance(columns, str):
+        columns = [columns]
+        
+    # Extract and ensure we force a DataFrame structure, even for a single column
+    # (Using df[columns] where columns is a list naturally returns a DataFrame)
+    sub_df = df[columns]
 
-    # JSON export with dataset label — team merges all 3 datasets here
-    df.insert(0, "dataset", dataset)
-    df.to_json(json_path, orient="records", indent=2)
-
-    print(f"\n[saved]  {csv_path}")
-    print(f"[saved]  {json_path}  ← share with Kim & Saxena for RQ2")
-    return df
+    # Compute basic aggregations
+    stats = sub_df.agg(['count', 'mean', 'median', 'var', 'min', 'max'])
+    
+    # Calculate quantiles separately to avoid index naming conflicts across pandas versions
+    q1 = sub_df.quantile(0.25)
+    q3 = sub_df.quantile(0.75)
+    
+    # Append quantiles to the summary dataframe
+    stats.loc['q1'] = q1
+    stats.loc['q3'] = q3
+    
+    # Reorder index labels for logical readability
+    ordered_indices = ['count', 'mean', 'median', 'var', 'min', 'q1', 'q3', 'max']
+    stats = stats.reindex(ordered_indices)
+        
+    return stats
