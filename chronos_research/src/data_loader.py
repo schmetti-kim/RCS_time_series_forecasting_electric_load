@@ -11,6 +11,7 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 from distutils.util import strtobool
+from entsoe import EntsoePandasClient
 
 from config import DATA_DIR, CONTEXT_LENGTH, PREDICTION_LENGTH, N_DAYS, ID_COLUMN, TIMESTAMP_COLUMN, TARGET_COLUMN
 
@@ -26,8 +27,14 @@ PAN_COVARIATE_COLS = [
 ]   
 PAN_START_DATE = "2015-01-04 00:00:00"
 
-# ── 1.1. Australia dataset ─────────────────────────────────────────────────────
+# ── 0.2. Australia dataset ─────────────────────────────────────────────────────
 AUS_START_DATE = "2010-01-04 00:00:00"
+
+# ── 0.3. Latvia dataset ──────────────────────────────────────────────────────── 
+LAT_COUNTRY_CODE = 'LV'  # BZN|LV or Area Code for Latvia
+LAT_START_DATE = "2021-01-01"
+LAT_END_DATE = "2026-01-01"
+LAT_TZ = 'Europe/Riga'
 
 # ── 1. Dataset loading ─────────────────────────────────────────────────────────
 # ── 1.1. Panama dataset ────────────────────────────────────────────────────────
@@ -196,8 +203,60 @@ def aus_convert_tsf_to_dataframe(
             contain_equal_length,
         )
 
+# ── 1.3. Latvia dataset ────────────────────────────────────────────────────────
+def lat_load(api_key: str = "cf169f50-54bf-41f4-b6ea-561887e05659") -> pd.DataFrame:
+    """
+    Downloads and preprocesses the Actual Total Load data for Latvia using the ENTSO-E API.
+
+    Parameters
+    ----------
+    api_key : str
+        The authorized ENTSO-E RESTful API token.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the sorted, timezone-localized Latvian electricity load.
+    """
+    # Initialize the ENTSO-E Pandas client
+    client = EntsoePandasClient(api_key=api_key)
+
+    # Localize to Europe/Riga to respect daylight savings and local system clock
+    start = pd.Timestamp(LAT_START_DATE, tz=LAT_TZ)
+    end = pd.Timestamp(LAT_END_DATE, tz=LAT_TZ)
+    
+    try:
+        # Fetch the historical actual total grid load
+        df = client.query_load(LAT_COUNTRY_CODE, start=start, end=end)
+        
+        # Convert the Series or raw DataFrame output into a clean standard format
+        if isinstance(df, pd.Series):
+            df = df.to_frame(name=TARGET_COLUMN)
+        elif 'Actual Load' in df.columns:
+            df = df.rename(columns={'Actual Load': TARGET_COLUMN})
+        else:
+            raise KeyError(f"Could not identify load column. Available columns: {list(df.columns)}")
+            
+        # Reset index to turn the DatetimeIndex into a timestamp column
+        df = df.reset_index()
+        df = df.rename(columns={df.columns[0]: TIMESTAMP_COLUMN})
+        
+        # Ensure standard sorting
+        df = df.sort_values(TIMESTAMP_COLUMN).reset_index(drop=True)
+        
+        # Check for any missing values in the target column before filling
+        missing_count = df[TARGET_COLUMN].isna().sum()
+        if missing_count > 0:
+            print(f"[Warning] Found {missing_count} missing entries in '{TARGET_COLUMN}'.")
+        else:
+            print(f"No missing entries found in '{TARGET_COLUMN}'. Pipeline is clean.")
+            return df
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to fetch ENTSO-E data for Latvia: {e}")
+
 # ── 2. Dataset preprocessing ───────────────────────────────────────────────────
-# ── 2.1. Panama dataset ─────────────────────────────────────────────────────
+# ── 2.1. Panama dataset ────────────────────────────────────────────────────────
 def pan_preprocessing(
     pan_loaded_data: pd.DataFrame
 ) -> None:
@@ -322,4 +381,78 @@ def aus_preprocessing(
     # print(aus_horizon_true)
 
     # 8. Final confirmation message
+    print("\n[SUCCESS] Preprocessing complete! The dataset is ready to be fed to Chronos-2.")
+
+# ── 2.3. Latvia dataset ────────────────────────────────────────────────────────
+def lat_preprocessing(
+    lat_loaded_data: pd.DataFrame
+) -> None:
+    """
+    Extracts the continuous total grid load sequence from the Latvian dataset 
+    and generates rolling windows across all available complete days.
+    """
+    # 1. Initialize lists to accumulate data for all rolling windows
+    all_contexts = []
+    all_horizons = []
+
+    # 2. Convert to naive local timestamps to standardize the clock
+    df = lat_loaded_data.copy()
+    df[TIMESTAMP_COLUMN] = pd.to_datetime(df[TIMESTAMP_COLUMN]).dt.tz_localize(None)
+
+    # 3. Set index to handle physical data gaps and duplicates
+    df = df.set_index(TIMESTAMP_COLUMN)
+
+    # 4. Fix Autumn DST (Duplicate hours): Group by exact time and average the duplicate load values
+    df = df.groupby(df.index).mean()
+
+    # 5. Fix Spring DST (Missing hours): Force a strict hourly grid and interpolate the missing hour
+    df = df.resample('1h').interpolate(method='linear')
+
+    # The dataset is now a physically perfect 24-hour-per-day grid.
+    hourly_series = df[TARGET_COLUMN]
+
+    # 6. Implement the rolling window over N_DAYS matching the target year anchor
+    start_anchor = pd.Timestamp(LAT_START_DATE)
+
+    # 7. Implement the rolling window step-by-step
+    for day in range(N_DAYS):
+        # Calculate sliding windows stepping by 24 hours at each iteration
+        window_start = start_anchor + pd.Timedelta(hours=day * 24)
+        context_end = window_start + pd.Timedelta(hours=CONTEXT_LENGTH)
+        horizon_end = context_end + pd.Timedelta(hours=PREDICTION_LENGTH)
+
+        # Extract context (e.g., 168h)
+        context_part = hourly_series.loc[window_start : context_end - pd.Timedelta(hours=1)].reset_index()
+        context_part.columns = [TIMESTAMP_COLUMN, TARGET_COLUMN]
+
+        # Create unique ID per rolling window to keep them separate in Chronos-2
+        context_part[ID_COLUMN] = f"LAT_day_{day}"
+
+        # Extract ground truth horizon (e.g., 24h)
+        horizon_part = hourly_series.loc[context_end : horizon_end - pd.Timedelta(hours=1)].values
+
+        # Safety Check: If a window is clipped due to data boundaries, raise a clear error
+        if len(horizon_part) != PREDICTION_LENGTH:
+            raise ValueError(
+                f"Day {day} generated a horizon of length {len(horizon_part)}, "
+                f"expected {PREDICTION_LENGTH}. Window: {context_end} to {horizon_end}"
+            )
+        
+        all_contexts.append(context_part)
+        all_horizons.append(horizon_part)
+
+    # 8. Combine all series context into a single long-format DataFrame
+    lat_context_df = pd.concat(all_contexts, ignore_index=True)
+
+    # 9. Stack horizons into a 2D array of shape (N_DAYS, PREDICTION_LENGTH)
+    lat_horizon_true = np.array(all_horizons)
+
+    # 10. Check for missing or infinite values
+    assert not lat_context_df[TARGET_COLUMN].isna().any(), "Latvia context contains NaN values!"
+
+    # 11. Save intermediate outputs
+    lat_context_df.to_csv(DATA_DIR / "processed" / "lat_context_df.csv", index=False)
+    np.save(DATA_DIR / "processed" / "lat_horizon_true.npy", lat_horizon_true)
+
+    # 12. Final confirmation message
     print("\n[SUCCESS] Preprocessing complete! The dataset is ready to be fed to Chronos-2.")
