@@ -6,12 +6,19 @@ Panama dataset: Download dataset once with
         -p data/ --unzip
 """
 
+import os
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
 from distutils.util import strtobool
 from entsoe import EntsoePandasClient
+import openmeteo_requests
+import requests_cache
+from retry_requests import retry
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+import holidays
 
 from config import DATA_DIR, CONTEXT_LENGTH, PREDICTION_LENGTH, N_DAYS, ID_COLUMN, TIMESTAMP_COLUMN, TARGET_COLUMN
 
@@ -456,3 +463,153 @@ def lat_preprocessing(
 
     # 12. Final confirmation message
     print("\n[SUCCESS] Preprocessing complete! The dataset is ready to be fed to Chronos-2.")
+
+# ── 3. Covariates loading & processing ─────────────────────────────────────────
+# ── 3.1. Weather covariates ────────────────────────────────────────────────────
+def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: float, offset_hours: int = 0) -> pd.DataFrame:
+    """
+    Fetches hourly historical weather data from the Open-Meteo Archive API and 
+    returns a formatted pandas DataFrame. Automatically adjusts UTC data by by a specified
+    offset to handle seamless alignment with regional target market times.
+    
+    Parameters:
+    -----------
+    start_date : str
+        The start date in 'YYYY-MM-DD' format (e.g., '2010-01-04').
+    end_date : str
+        The end date in 'YYYY-MM-DD' format (e.g., '2015-01-04').
+    latitude : float
+        Latitude coordinate of the location (e.g., -34.9287 for Adelaide).
+    longitude : float
+        Longitude coordinate of the location (e.g., 138.5986 for Adelaide).
+    offset_hours : int, default 0
+        The number of hours to shift the weather timestamps to align with target data
+        (e.g., +10 for AEMO market time when fetching in GMT).
+        
+    Returns:
+    --------
+    pd.DataFrame
+        Hourly weather variables matching the period.
+    """
+    # Robust conversion using pandas to guarantee 'YYYY-MM-DD' format
+    clean_start_date = pd.to_datetime(start_date).strftime('%Y-%m-%d')
+    clean_end_date = pd.to_datetime(end_date).strftime('%Y-%m-%d')
+
+    # Setup the Open-Meteo API client with cache and retry on error
+    cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
+    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+    openmeteo = openmeteo_requests.Client(session=retry_session)
+    
+    url = "https://archive-api.open-meteo.com/v1/archive"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "start_date": clean_start_date,
+        "end_date": clean_end_date,
+        "timezone": "GMT",
+        "hourly": [
+            "temperature_2m", "dew_point_2m", "precipitation", "pressure_msl", 
+            "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", "wind_speed_10m", 
+            "wind_speed_100m", "wind_gusts_10m", "soil_temperature_0_to_7cm", "soil_temperature_7_to_28cm", 
+            "soil_moisture_0_to_7cm", "soil_moisture_7_to_28cm"
+        ],
+    }
+
+    responses = openmeteo.weather_api(url, params=params)
+    response = responses[0]
+
+    # Process hourly data structure
+    hourly = response.Hourly()
+    
+    # Efficiently load arrays into a dictionary mapping variable index positions
+    hourly_data = {
+        "date": pd.date_range(
+            start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+            end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=hourly.Interval()),
+            inclusive="left"
+        )
+    }
+
+    # Loop through requested features dynamically to assign them values
+    feature_names = params["hourly"]
+    for idx, feature in enumerate(feature_names):
+        hourly_data[feature] = hourly.Variables(idx).ValuesAsNumpy()
+
+    hourly_dataframe = pd.DataFrame(data=hourly_data)
+
+    # Strip timezone metadata to allow raw arithmetic operations during tensor batching
+    hourly_dataframe["date"] = hourly_dataframe["date"].dt.tz_localize(None)
+
+    # Conditionally apply shifting if a non-zero offset is explicitly provided
+    if offset_hours != 0:
+        hourly_dataframe["date"] = hourly_dataframe["date"] + pd.Timedelta(hours=offset_hours)
+
+    return hourly_dataframe
+
+# ── 3.2. Calendar covariates ───────────────────────────────────────────────────
+def add_calendar(df: pd.DataFrame, country_code: str, subdivision: str = None) -> pd.DataFrame:
+    """
+    Adds non-linear seasonal shock components (weekend, holiday) to the dataframe.
+    """
+    df[TIMESTAMP_COLUMN] = pd.to_datetime(df[TIMESTAMP_COLUMN])
+    
+    # 1. Generate only the weekend shock (0 = weekday, 1 = weekend)
+    df['weekend'] = (df[TIMESTAMP_COLUMN].dt.dayofweek >= 5).astype(int)
+    
+    # 2. Extract unique years to fetch correct holiday boundaries dynamically
+    years = df[TIMESTAMP_COLUMN].dt.year.unique().tolist()
+    
+    # 3. Pull holiday maps dynamically
+    regional_holidays = holidays.country_holidays(
+        country_code, 
+        subdiv=subdivision, 
+        years=years
+    )
+    
+    # 4. Map holiday boolean arrays to numeric binary flags
+    df['holiday'] = df[TIMESTAMP_COLUMN].dt.date.isin(regional_holidays).astype(int)
+    
+    return df
+
+# ── 3.3 Principal Component Analysis (for Dimensionality Reduction) ────────────
+def apply_semantic_pca(weather_df: pd.DataFrame, n_components: int = 1) -> pd.DataFrame:
+    """
+    Groups 14 Open-Meteo variables semantically and applies PCA to each group independently.
+    """
+    df = weather_df.copy()
+    
+    # 1. Define distinct semantic groups
+    semantic_groups = {
+        "temp": ["temperature_2m", "dew_point_2m", "soil_temperature_0_to_7cm", "soil_temperature_7_to_28cm"],
+        "atmosphere": ["pressure_msl", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", "precipitation"],
+        "wind": ["wind_speed_10m", "wind_speed_100m", "wind_gusts_10m"],
+        "soil_moist": ["soil_moisture_0_to_7cm", "soil_moisture_7_to_28cm"]
+    }
+    
+    # Initialize a clean output dataframe with your keys preserved
+    output_df = pd.DataFrame({TIMESTAMP_COLUMN: df["date"]}) if "date" in df.columns else pd.DataFrame({TIMESTAMP_COLUMN: df.index})
+    
+    # 2. Iterate through each semantic group and compress features
+    for group_name, columns in semantic_groups.items():
+        # Subset columns present in the input DataFrame
+        available_cols = [col for col in columns if col in df.columns]
+        if not available_cols:
+            continue
+            
+        # Extract features
+        x = df[available_cols].values
+        
+        # Scaling is mandatory for PCA since variables have different base units
+        x_scaled = StandardScaler().fit_transform(x)
+        
+        # Configure PCA component bounds dynamically based on group size
+        current_components = min(n_components, len(available_cols))
+        pca = PCA(n_components=current_components)
+        x_pca = pca.fit_transform(x_scaled)
+        
+        # Save compressed components to output container
+        for i in range(current_components):
+            output_df[f"{group_name}_pc{i+1}"] = x_pca[:, i]
+            
+    return output_df
