@@ -136,3 +136,32 @@ def s1_evaluation(
         print(f"Metrics successfully created and saved to '{save_path}'.")
 
     return metrics_df
+
+# ── S2 — Covariate informed forecasting ────────────────────────────────────────
+def s2_predict(
+    pipeline, 
+    context_df: pd.DataFrame,
+    future_df: pd.DataFrame,
+    prediction_length: int = PREDICTION_LENGTH, 
+    quantile_levels: list = QUANTILE_LEVELS,
+    id_column: str = ID_COLUMN, 
+    timestamp_column: str = TIMESTAMP_COLUMN, 
+    target_column: str = TARGET_COLUMN,
+    save_path: str = None
+) -> pd.DataFrame:
+    
+    pred_df = pipeline.predict_df(
+        context_df, 
+        future_df = future_df,
+        prediction_length = prediction_length,
+        quantile_levels = quantile_levels,
+        id_column = id_column,
+        timestamp_column = timestamp_column,
+        target = target_column
+    )
+
+    if save_path:
+        pred_df.to_csv(save_path, index=False)
+        print(f"Predictions successfully created and saved to '{save_path}'.")
+        
+    return pred_df

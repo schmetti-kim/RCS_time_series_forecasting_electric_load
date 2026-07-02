@@ -572,7 +572,7 @@ def add_calendar(df: pd.DataFrame, country_code: str, subdivision: str = None) -
     
     return df
 
-# ── 3.3 Principal Component Analysis (for Dimensionality Reduction) ────────────
+# ── 3.3. Principal Component Analysis (for Dimensionality Reduction) ───────────
 def apply_semantic_pca(weather_df: pd.DataFrame, n_components: int = 1) -> pd.DataFrame:
     """
     Groups 14 Open-Meteo variables semantically and applies PCA to each group independently.
@@ -613,3 +613,76 @@ def apply_semantic_pca(weather_df: pd.DataFrame, n_components: int = 1) -> pd.Da
             output_df[f"{group_name}_pc{i+1}"] = x_pca[:, i]
             
     return output_df
+
+# ── 3.4. Merge Context with Covariates ─────────────────────────────────────────
+def merge_context_with_covariates(
+    context_df: pd.DataFrame, 
+    covariates_df: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Converts timestamp columns to datetime and performs a left merge to align 
+    covariates with the long-format rolling window context DataFrame.
+    """
+    # 0. Create shallow/deep copies 
+    context_df = context_df.copy()
+    covariates_df = covariates_df.copy()
+
+    # 1. Dynamically extract the prefix from the first entry of the id column (e.g., "AUS_SA_day_0" -> "aus")
+    first_id_value = context_df[ID_COLUMN].iloc[0]
+    prefix = first_id_value.split("_")[0].lower()
+    save_name = f"{prefix}_cov_context_df.csv"
+    
+    # 2. Harmonize data types to prevent merge ValueErrors
+    covariates_df[TIMESTAMP_COLUMN] = pd.to_datetime(covariates_df[TIMESTAMP_COLUMN])
+    context_df[TIMESTAMP_COLUMN] = pd.to_datetime(context_df[TIMESTAMP_COLUMN])
+
+    # 3. Perform many-to-one left merge matching on the timestamp column
+    # A LEFT JOIN keeps every single row from the left table and pulls in matching details from the right table wherever the joining keys align. 
+    # If a key from the left table has no match on the right, the missing right-side columns are simply filled with NULL.
+    merged_df = pd.merge(
+        context_df, 
+        covariates_df, 
+        on=[TIMESTAMP_COLUMN], 
+        how="left"
+    )
+    
+    # Save file and print confirmation message
+    save_path = DATA_DIR / "processed" / save_name
+    merged_df.to_csv(save_path, index=False)
+    print(f"File successfully saved to: {save_path}")
+
+    return merged_df
+
+# # ── 3.5. Extract Prediction Time Frame per ID ──────────────────────────────────
+def extract_prediction_timeframe(
+    context_df: pd.DataFrame, 
+    timestamp_col: str = TIMESTAMP_COLUMN, 
+    id_col: str = ID_COLUMN
+) -> pd.DataFrame:
+    """
+    Identifies every unique rolling window ID, extracts its corresponding 24-hour
+    future prediction horizon based on the context timeline, and returns a clean,
+    long-format index dataframe sorted by time.
+    """
+    context_df = context_df.copy()
+    context_df[timestamp_col] = pd.to_datetime(context_df[timestamp_col])
+    
+    # 1. Identify the max timestamp for each window group
+    grouped = context_df.groupby(id_col)[timestamp_col].max()
+    
+    prediction_records = []
+    for window_id, max_context_time in grouped.items():
+        pred_start = max_context_time + pd.Timedelta(hours=1)
+        pred_timestamps = pd.date_range(start=pred_start, periods=24, freq="h")
+        
+        window_block = pd.DataFrame({
+            timestamp_col: pred_timestamps,
+            id_col: window_id
+        })
+        prediction_records.append(window_block)
+        
+    # 2. Combine all blocks and sort by timestamp for the correct timeline order
+    prediction_timeframe_df = pd.concat(prediction_records, ignore_index=True)
+    prediction_timeframe_df = prediction_timeframe_df.sort_values(by=timestamp_col)
+    
+    return prediction_timeframe_df
