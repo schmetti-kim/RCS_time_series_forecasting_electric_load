@@ -557,17 +557,20 @@ def add_calendar(df: pd.DataFrame, country_code: str, subdivision: str = None) -
     # 1. Generate only the weekend shock (0 = weekday, 1 = weekend)
     df['weekend'] = (df[TIMESTAMP_COLUMN].dt.dayofweek >= 5).astype(int)
     
-    # 2. Extract unique years to fetch correct holiday boundaries dynamically
+    # 2. Day of week (Monday=0, ..., Sunday=6)
+    df['dow'] = df[TIMESTAMP_COLUMN].dt.dayofweek
+
+    # 3. Extract unique years to fetch correct holiday boundaries dynamically
     years = df[TIMESTAMP_COLUMN].dt.year.unique().tolist()
     
-    # 3. Pull holiday maps dynamically
+    # 4. Pull holiday maps dynamically
     regional_holidays = holidays.country_holidays(
         country_code, 
         subdiv=subdivision, 
         years=years
     )
     
-    # 4. Map holiday boolean arrays to numeric binary flags
+    # 5. Map holiday boolean arrays to numeric binary flags
     df['holiday'] = df[TIMESTAMP_COLUMN].dt.date.isin(regional_holidays).astype(int)
     
     return df

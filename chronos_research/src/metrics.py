@@ -18,23 +18,6 @@ def calculate_metrics(y_true, y_pred):
 
     return rmse, mape
 
-# def save_results(results: list[dict], results_dir: Path, dataset: str = "Panama"):
-#     """Save CSV + JSON (JSON used by teammates for RQ2 cross-dataset merge)."""
-#     df = pd.DataFrame(results)
-
-#     csv_path  = results_dir / f"{dataset.lower()}_results.csv"
-#     json_path = results_dir / f"{dataset.lower()}_results_rq2.json"
-
-#     df.to_csv(csv_path, index=False)
-
-#     # JSON export with dataset label — team merges all 3 datasets here
-#     df.insert(0, "dataset", dataset)
-#     df.to_json(json_path, orient="records", indent=2)
-
-#     print(f"\n[saved]  {csv_path}")
-#     print(f"[saved]  {json_path}  ← share with Kim & Saxena for RQ2")
-#     return df
-
 def compute_summary_statistics(df, columns):
     """
     Computes summary statistics for evaluation metrics.
