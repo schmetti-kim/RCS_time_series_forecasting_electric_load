@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_squared_error
 from pathlib import Path
+from config import WEATHER_VARS
 
 def calculate_metrics(y_true, y_pred):
     y_true, y_pred = np.array(y_true), np.array(y_pred)
@@ -53,3 +54,41 @@ def compute_summary_statistics(df, columns):
     stats = stats.reindex(ordered_indices)
         
     return stats
+
+def calculate_weather_correlations(df, suffixes, labels, weather_vars = WEATHER_VARS):
+    """
+    Calculates the correlation between three locations for a given list of weather variables.
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        The merged weather DataFrame containing the suffixed columns.
+    weather_vars : list of str
+        The base names of the weather variables to loop through.
+    suffixes : tuple or list of str, e.g.,('_rig', '_dgp', '_lpx')
+        The suffixes used in the DataFrame columns for each location.
+    labels : tuple or list of str, e.g.,('Riga', 'Daugavpils', 'Liepaja')
+        The human-readable names for the locations used to label the output columns.
+        
+    Returns:
+    --------
+    pandas.DataFrame
+        A DataFrame containing the correlation results for each variable across the 3 location pairs.
+    """
+    if len(suffixes) != 3 or len(labels) != 3:
+        raise ValueError("Both 'suffixes' and 'labels' must contain exactly 3 elements.")
+        
+    sfx1, sfx2, sfx3 = suffixes
+    lbl1, lbl2, lbl3 = labels
+    
+    correlation_results = []
+
+    for var in weather_vars:
+        correlation_results.append({
+            "variable": var,
+            f"{lbl1}-{lbl2}": df[f"{var}{sfx1}"].corr(df[f"{var}{sfx2}"]),
+            f"{lbl1}-{lbl3}": df[f"{var}{sfx1}"].corr(df[f"{var}{sfx3}"]),
+            f"{lbl2}-{lbl3}": df[f"{var}{sfx2}"].corr(df[f"{var}{sfx3}"])
+        })
+
+    return pd.DataFrame(correlation_results)

@@ -130,3 +130,58 @@ def plot_time_series(data1_df, data2_matrix, save_path):
     plt.savefig(save_path, dpi=300)
     plt.close()
     print(f"Plot successfully created and saved to '{save_path}'.")
+
+# ── Correlation Plot ────────────────────────────────────────────────────────────────────
+def plot_correlation(correlation_df, save_path : str, cmap="coolwarm", figsize=(8, 6)):
+    """
+    Plots a heatmap of the weather correlation results.
+    
+    Parameters:
+    -----------
+    correlation_df : pandas.DataFrame
+        The DataFrame output from calculate_weather_correlations.
+        Must contain a 'variable' column.
+    cmap : str, default='coolwarm'
+        The colormap to use for the heatmap (e.g., 'RdBu', 'viridis').
+    figsize : tuple, default=(8, 6)
+        The width and height of the figure in inches.
+    """
+    # 1. Set the 'variable' column as the row index
+    corr_plot = correlation_df.set_index("variable")
+    
+    # 2. Automatically detect the correlation columns (city pairs)
+    columns_to_plot = corr_plot.columns.tolist()
+    num_cols = len(columns_to_plot)
+    
+    # 3. Create the plot
+    plt.figure(figsize=figsize)
+    
+    img = plt.imshow(
+        corr_plot[columns_to_plot],
+        cmap=cmap,
+        vmin=-1,
+        vmax=1
+    )
+    
+    # 4. Set dynamic tick labels based on the data
+    plt.xticks(
+        range(num_cols),
+        columns_to_plot,
+        rotation=45
+    )
+    plt.yticks(
+        range(len(corr_plot)),
+        corr_plot.index
+    )
+    
+    # 5. Add colorbar and formatting
+    plt.colorbar(img, label="Pearson correlation")
+    plt.tight_layout()
+    
+    # 6. Save the figure (Do this BEFORE plt.show())
+    plt.savefig(save_path, dpi=300)
+    print(f"Plot successfully created and saved to '{save_path}'.")
+    
+    # 7. Show and close
+    plt.show()
+    plt.close()

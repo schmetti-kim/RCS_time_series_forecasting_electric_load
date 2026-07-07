@@ -20,7 +20,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import holidays
 
-from config import DATA_DIR, CONTEXT_LENGTH, PREDICTION_LENGTH, N_DAYS, ID_COLUMN, TIMESTAMP_COLUMN, TARGET_COLUMN
+from config import DATA_DIR, CONTEXT_LENGTH, PREDICTION_LENGTH, N_DAYS, ID_COLUMN, TIMESTAMP_COLUMN, TARGET_COLUMN, WEATHER_VARS
 
 # ── 0. Dataset specific configurations ─────────────────────────────────────────
 # ── 0.1. Panama dataset ────────────────────────────────────────────────────────
@@ -466,11 +466,11 @@ def lat_preprocessing(
 
 # ── 3. Covariates loading & processing ─────────────────────────────────────────
 # ── 3.1. Weather covariates ────────────────────────────────────────────────────
-def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: float, offset_hours: int = 0) -> pd.DataFrame:
+def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: float, offset_hours: int = 0, timezone: str = "GMT") -> pd.DataFrame:
     """
-    Fetches hourly historical weather data from the Open-Meteo Archive API and 
-    returns a formatted pandas DataFrame. Automatically adjusts UTC data by by a specified
-    offset to handle seamless alignment with regional target market times.
+    Fetches hourly historical weather data from the Open-Meteo Archive API and returns a formatted pandas DataFrame. 
+    Timestamps are interpreted according to the specified timezone and converted to naive timestamps for downstream processing. 
+    An optional fixed offset can be applied for datasets that require additional alignment.
     
     Parameters:
     -----------
@@ -485,6 +485,9 @@ def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: fl
     offset_hours : int, default 0
         The number of hours to shift the weather timestamps to align with target data
         (e.g., +10 for AEMO market time when fetching in GMT).
+    timezone : str
+        Target timezone for weather timestamps (e.g., "Europe/Riga",
+        "Australia/Adelaide", "America/Panama").
         
     Returns:
     --------
@@ -507,12 +510,7 @@ def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: fl
         "start_date": clean_start_date,
         "end_date": clean_end_date,
         "timezone": "GMT",
-        "hourly": [
-            "temperature_2m", "dew_point_2m", "precipitation", "pressure_msl", 
-            "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", "wind_speed_10m", 
-            "wind_speed_100m", "wind_gusts_10m", "soil_temperature_0_to_7cm", "soil_temperature_7_to_28cm", 
-            "soil_moisture_0_to_7cm", "soil_moisture_7_to_28cm"
-        ],
+        "hourly": WEATHER_VARS
     }
 
     responses = openmeteo.weather_api(url, params=params)
@@ -529,8 +527,9 @@ def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: fl
             freq=pd.Timedelta(seconds=hourly.Interval()),
             inclusive="left"
         )
+        .tz_convert(timezone)
     }
-
+        
     # Loop through requested features dynamically to assign them values
     feature_names = params["hourly"]
     for idx, feature in enumerate(feature_names):
@@ -656,7 +655,7 @@ def merge_context_with_covariates(
 
     return merged_df
 
-# # ── 3.5. Extract Prediction Time Frame per ID ──────────────────────────────────
+# ── 3.5. Extract Prediction Time Frame per ID ────────────────
 def extract_prediction_timeframe(
     context_df: pd.DataFrame, 
     timestamp_col: str = TIMESTAMP_COLUMN, 
@@ -689,3 +688,112 @@ def extract_prediction_timeframe(
     prediction_timeframe_df = prediction_timeframe_df.sort_values(by=timestamp_col)
     
     return prediction_timeframe_df
+
+# ── 3.6. Fix DST-related timestamp issues ──────────────────
+def fix_dst_timestamps(df: pd.DataFrame, timestamp_col: str = "date") -> pd.DataFrame:
+    """
+    Fixes DST-related timestamp issues:
+    - Duplicate hours: average duplicated timestamps (autumn DST).
+    - Missing hours: insert missing timestamps and interpolate values (spring DST).
+    """
+
+    df = df.copy()
+    df[timestamp_col] = pd.to_datetime(df[timestamp_col])
+
+    # Detect duplicate timestamps (DST fall-back)
+    duplicate_timestamps = (
+        df.loc[df[timestamp_col].duplicated(keep=False), timestamp_col]
+        .sort_values()
+        .unique()
+    )
+
+    # Detect missing timestamps (DST spring-forward)
+    full_range = pd.date_range(
+        start=df[timestamp_col].min(),
+        end=df[timestamp_col].max(),
+        freq="h"
+    )
+    missing_timestamps = full_range.difference(df[timestamp_col])
+
+    # Report detected issues
+    print("\n[DST Check]")
+    if len(duplicate_timestamps) > 0:
+        print(f"Duplicate timestamps found ({len(duplicate_timestamps)}):")
+        print(list(duplicate_timestamps))
+    else:
+        print("No duplicate timestamps found.")
+
+    if len(missing_timestamps) > 0:
+        print(f"Missing timestamps found ({len(missing_timestamps)}):")
+        print(list(missing_timestamps))
+    else:
+        print("No missing timestamps found.")
+
+    # 1. Handle duplicate timestamps (DST fall-back)
+    numeric_cols = df.select_dtypes(include="number").columns
+
+    df = (
+        df.groupby(timestamp_col, as_index=False)[numeric_cols]
+        .mean()
+    )
+
+    # 2. Reindex to complete hourly timeline (DST spring-forward gaps)
+    df = (
+        df.set_index(timestamp_col)
+        .reindex(full_range)
+        .rename_axis(timestamp_col)
+        .reset_index()
+    )
+
+    # 3. Interpolate inserted missing hours
+    df[numeric_cols] = df[numeric_cols].interpolate(method="linear")
+    print(f"\n[DST Inspection/Correction Complete] Final rows: {len(df)}")
+
+    return df
+
+# ── 3.7. Merge weather covariate datasets from different locations ─────
+def merge_location_weather(df1, df2, df3, suffixes, weather_vars = WEATHER_VARS):
+    """
+    Merges weather dataframes from three different locations on the 'date' column
+    and applies distinct suffixes to the weather variables.
+    
+    Parameters:
+    -----------
+    df1, df2, df3 : pandas.DataFrame
+        The three input weather datasets. Must contain a 'date' column.
+    weather_vars : list of str
+        The specific weather column names to extract.
+    suffixes : tuple or list of str, e.g.,('_rig', '_dgp', '_lpx')
+        The suffixes to append to the weather variables for df1, df2, and df3 respectively.
+        
+    Returns:
+    --------
+    pandas.DataFrame
+        A single merged DataFrame aligned by date.
+    """
+    # Ensure we have exactly 3 suffixes
+    if len(suffixes) != 3:
+        raise ValueError("You must provide exactly three suffixes.")
+        
+    sfx1, sfx2, sfx3 = suffixes
+    keep_cols = ["date"] + weather_vars
+    
+    # 1. Merge the first two DataFrames and apply their respective suffixes
+    merged_df = df1[keep_cols].merge(
+        df2[keep_cols],
+        on="date",
+        suffixes=(sfx1, sfx2)
+    )
+    
+    # 2. Merge the third DataFrame
+    merged_df = merged_df.merge(
+        df3[keep_cols],
+        on="date"
+    )
+    
+    # 3. Rename the third DataFrame's columns explicitly using its suffix
+    merged_df = merged_df.rename(
+        columns={col: col + sfx3 for col in weather_vars}
+    )
+    
+    return merged_df

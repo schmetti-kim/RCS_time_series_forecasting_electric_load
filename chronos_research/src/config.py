@@ -15,6 +15,12 @@ ID_COLUMN = "id"
 TIMESTAMP_COLUMN = "timestamp"
 TARGET_COLUMN = "target"
 PREDICT_COLUMN = "predictions"
+WEATHER_VARS = [
+            "temperature_2m", "dew_point_2m", "precipitation", "pressure_msl", 
+            "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", "wind_speed_10m", 
+            "wind_speed_100m", "wind_gusts_10m", "soil_temperature_0_to_7cm", "soil_temperature_7_to_28cm", 
+            "soil_moisture_0_to_7cm", "soil_moisture_7_to_28cm"
+        ]
 
 # ── Forecasting ────────────────────────────────────────────────────────────────
 CONTEXT_LENGTH = 168
