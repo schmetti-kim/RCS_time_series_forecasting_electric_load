@@ -619,7 +619,8 @@ def apply_semantic_pca(weather_df: pd.DataFrame, n_components: int = 1) -> pd.Da
 # ── 3.4. Merge Context with Covariates ─────────────────────────────────────────
 def merge_context_with_covariates(
     context_df: pd.DataFrame, 
-    covariates_df: pd.DataFrame
+    covariates_df: pd.DataFrame,
+    save_name: str
 ) -> pd.DataFrame:
     """
     Converts timestamp columns to datetime and performs a left merge to align 
@@ -632,7 +633,6 @@ def merge_context_with_covariates(
     # 1. Dynamically extract the prefix from the first entry of the id column (e.g., "AUS_SA_day_0" -> "aus")
     first_id_value = context_df[ID_COLUMN].iloc[0]
     prefix = first_id_value.split("_")[0].lower()
-    save_name = f"{prefix}_cov_context_df.csv"
     
     # 2. Harmonize data types to prevent merge ValueErrors
     covariates_df[TIMESTAMP_COLUMN] = pd.to_datetime(covariates_df[TIMESTAMP_COLUMN])
@@ -655,7 +655,7 @@ def merge_context_with_covariates(
 
     return merged_df
 
-# ── 3.5. Extract Prediction Time Frame per ID ────────────────
+# ── 3.5. Extract Prediction Time Frame per ID ──────────────────────────────────
 def extract_prediction_timeframe(
     context_df: pd.DataFrame, 
     timestamp_col: str = TIMESTAMP_COLUMN, 
@@ -751,7 +751,7 @@ def fix_dst_timestamps(df: pd.DataFrame, timestamp_col: str = "date") -> pd.Data
 
     return df
 
-# ── 3.7. Merge weather covariate datasets from different locations ─────
+# ── 3.7. Merge weather covariate datasets from different locations ─────────────
 def merge_location_weather(df1, df2, df3, suffixes, weather_vars = WEATHER_VARS):
     """
     Merges weather dataframes from three different locations on the 'date' column
@@ -797,3 +797,39 @@ def merge_location_weather(df1, df2, df3, suffixes, weather_vars = WEATHER_VARS)
     )
     
     return merged_df
+
+# ── 3.8. Create a population-weighted weather dataset ─────────────────────────
+def create_population_weighted_weather(weather_df, city_suffixes, populations):
+    """
+    Create a population-weighted weather dataset.
+
+    Args:
+        weather_df (pd.DataFrame): Weather data containing one column per
+            weather variable and city (e.g., temperature_2m_rig).
+        city_suffixes (list[str]): City suffixes, e.g. ["_rig", "_dgp", "_lpx"].
+        populations (list[int]): Population corresponding to each city.
+
+    Returns:
+        pd.DataFrame: Population-weighted weather dataset.
+    """
+    weights = np.array(populations, dtype=float)
+    weights /= weights.sum()
+
+    weighted_df = pd.DataFrame()
+    weighted_df["date"] = weather_df["date"]
+
+    weather_vars = sorted(
+        set(
+            col[:-len(city_suffixes[0])]
+            for col in weather_df.columns
+            if col != "date" and col.endswith(city_suffixes[0])
+        )
+    )
+
+    for var in weather_vars:
+        weighted_df[var] = sum(
+            w * weather_df[f"{var}{suffix}"]
+            for w, suffix in zip(weights, city_suffixes)
+        )
+
+    return weighted_df
