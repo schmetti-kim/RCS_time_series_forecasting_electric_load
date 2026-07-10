@@ -33,6 +33,7 @@ PAN_COVARIATE_COLS = [
     "Holiday_ID", "holiday", "school"
 ]   
 PAN_START_DATE = "2015-01-04 00:00:00"
+PAN_COUNTRY_CODE = "PA"
 
 # ── 0.2. Australia dataset ─────────────────────────────────────────────────────
 AUS_START_DATE = "2010-01-04 00:00:00"
