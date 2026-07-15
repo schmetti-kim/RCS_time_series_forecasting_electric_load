@@ -15,7 +15,7 @@ import pandas as pd
 
 from config import (
     DATA_DIR, CONTEXT_LENGTH, PREDICTION_LENGTH, QUANTILE_LEVELS, SEED,
-    ID_COLUMN, TIMESTAMP_COLUMN, TARGET_COLUMN, RESULTS_DIR
+    ID_COLUMN, TIMESTAMP_COLUMN, TARGET_COLUMN, RESULTS_DIR, N_DAYS
 )
 from metrics import calculate_metrics
 
@@ -160,6 +160,48 @@ def s2_predict(
         target = target_column
     )
 
+    if save_path:
+        pred_df.to_csv(save_path, index=False)
+        print(f"Predictions successfully created and saved to '{save_path}'.")
+        
+    return pred_df
+
+# ── S3 — cross-region forecasting ────────────────────────────────────────
+def s3_predict(
+    pipeline, 
+    context_df: pd.DataFrame,
+    future_df: pd.DataFrame,
+    prediction_length: int = PREDICTION_LENGTH, 
+    quantile_levels: list = QUANTILE_LEVELS,
+    id_column: str = ID_COLUMN, 
+    timestamp_column: str = TIMESTAMP_COLUMN, 
+    target_column: str = TARGET_COLUMN,
+    save_path: str = None
+) -> pd.DataFrame:
+    
+    # Initialize empty DataFrame to accumulate results
+    pred_df = pd.DataFrame()
+
+    for day in range(N_DAYS):
+        # Filter for the specific day across all states
+        # This selects any ID ending with _day_0, _day_1, etc.
+        context_subset = context_df[context_df[ID_COLUMN].str.endswith(f"_day_{day}")]
+        future_subset = future_df[future_df[ID_COLUMN].str.endswith(f"_day_{day}")]
+        
+        pred_subset = pipeline.predict_df(
+            context_subset, 
+            future_df = future_subset,
+            prediction_length = prediction_length,
+            quantile_levels = quantile_levels,
+            id_column = id_column,
+            timestamp_column = timestamp_column,
+            target = target_column,
+            cross_learning = True
+        )
+
+        # Append pred_subset to pred_df
+        pred_df = pd.concat([pred_df, pred_subset], ignore_index=True)
+    
     if save_path:
         pred_df.to_csv(save_path, index=False)
         print(f"Predictions successfully created and saved to '{save_path}'.")

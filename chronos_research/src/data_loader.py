@@ -37,6 +37,8 @@ PAN_COUNTRY_CODE = "PA"
 
 # ── 0.2. Australia dataset ─────────────────────────────────────────────────────
 AUS_START_DATE = "2010-01-04 00:00:00"
+AUS_ADE_TZ = "Australia/Adelaide"
+AUS_MEL_TZ = "Australia/Melbourne"
 
 # ── 0.3. Latvia dataset ──────────────────────────────────────────────────────── 
 LAT_COUNTRY_CODE = 'LV'  # BZN|LV or Area Code for Latvia
@@ -324,7 +326,8 @@ def pan_preprocessing(
 
 # ── 2.2. Australia dataset ─────────────────────────────────────────────────────
 def aus_preprocessing(
-    aus_loaded_data: pd.DataFrame
+    aus_loaded_data: pd.DataFrame,
+    state: str = "SA"
 ) -> None:
     """
     Extracts the South Australia (SA) series from the pre-loaded Australian dataset,
@@ -334,8 +337,8 @@ def aus_preprocessing(
     all_contexts = []
     all_horizons = []
 
-    # 2. Extract the South Australia (SA) series in the loaded dataframe
-    series_row = aus_loaded_data.iloc[3]
+    # 2. Extract series of the chosen state in the loaded dataframe
+    series_row = aus_loaded_data[aus_loaded_data["state"] == state].iloc[0]
     state_id = series_row["state"]
     start_date = series_row["start_timestamp"]
     series_values = pd.Series(series_row["series_value"])
@@ -377,8 +380,12 @@ def aus_preprocessing(
     assert not aus_context_df[TARGET_COLUMN].isna().any(), "Context contains NaN values!"
 
     # 6. Save intermediate outputs
-    aus_context_df.to_csv(DATA_DIR / "processed" / "aus_context_df.csv", index=False)
-    np.save(DATA_DIR / "processed" / "aus_horizon_true.npy", aus_horizon_true)
+    if state == "SA":
+      aus_context_df.to_csv(DATA_DIR / "processed" / "aus_context_df.csv", index=False)
+      np.save(DATA_DIR / "processed" / "aus_horizon_true.npy", aus_horizon_true)
+    else:
+      aus_context_df.to_csv(DATA_DIR / "processed" / f"aus_{state.lower()}_context_df.csv", index=False)
+      np.save(DATA_DIR / "processed" / f"aus_{state.lower()}_horizon_true.npy", aus_horizon_true)
 
     # 7. Display previews of the generated intermediate outputs
     # print("--- Context DataFrame Preview (First & Last 5 Rows) ---")
@@ -467,7 +474,7 @@ def lat_preprocessing(
 
 # ── 3. Covariates loading & processing ─────────────────────────────────────────
 # ── 3.1. Weather covariates ────────────────────────────────────────────────────
-def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: float, offset_hours: int = 0, timezone: str = "GMT") -> pd.DataFrame:
+def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: float, offset_hours: float = 0.0, timezone: str = "GMT") -> pd.DataFrame:
     """
     Fetches hourly historical weather data from the Open-Meteo Archive API and returns a formatted pandas DataFrame. 
     Timestamps are interpreted according to the specified timezone and converted to naive timestamps for downstream processing. 
@@ -483,7 +490,7 @@ def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: fl
         Latitude coordinate of the location (e.g., -34.9287 for Adelaide).
     longitude : float
         Longitude coordinate of the location (e.g., 138.5986 for Adelaide).
-    offset_hours : int, default 0
+    offset_hours : float, default 0.0
         The number of hours to shift the weather timestamps to align with target data
         (e.g., +10 for AEMO market time when fetching in GMT).
     timezone : str
@@ -542,7 +549,7 @@ def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: fl
     hourly_dataframe["date"] = hourly_dataframe["date"].dt.tz_localize(None)
 
     # Conditionally apply shifting if a non-zero offset is explicitly provided
-    if offset_hours != 0:
+    if offset_hours != 0.0:
         hourly_dataframe["date"] = hourly_dataframe["date"] + pd.Timedelta(hours=offset_hours)
 
     return hourly_dataframe
