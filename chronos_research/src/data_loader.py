@@ -14,13 +14,14 @@ from datetime import datetime
 from distutils.util import strtobool
 from entsoe import EntsoePandasClient
 import openmeteo_requests
+from pandas.core.arrays import boolean
 import requests_cache
 from retry_requests import retry
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import holidays
 
-from config import DATA_DIR, CONTEXT_LENGTH, PREDICTION_LENGTH, N_DAYS, ID_COLUMN, TIMESTAMP_COLUMN, TARGET_COLUMN, WEATHER_VARS
+from config import DATA_DIR, CONTEXT_LENGTH, PREDICTION_LENGTH, N_DAYS, ID_COLUMN, TIMESTAMP_COLUMN, TARGET_COLUMN, WEATHER_VARS, WEATHER_VARS_ENSEMBLE
 
 # ── 0. Dataset specific configurations ─────────────────────────────────────────
 # ── 0.1. Panama dataset ────────────────────────────────────────────────────────
@@ -474,7 +475,7 @@ def lat_preprocessing(
 
 # ── 3. Covariates loading & processing ─────────────────────────────────────────
 # ── 3.1. Weather covariates ────────────────────────────────────────────────────
-def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: float, offset_hours: float = 0.0, timezone: str = "GMT") -> pd.DataFrame:
+def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: float, offset_hours: float = 0.0, timezone: str = "GMT", ensemble: bool = False) -> pd.DataFrame:
     """
     Fetches hourly historical weather data from the Open-Meteo Archive API and returns a formatted pandas DataFrame. 
     Timestamps are interpreted according to the specified timezone and converted to naive timestamps for downstream processing. 
@@ -496,6 +497,8 @@ def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: fl
     timezone : str
         Target timezone for weather timestamps (e.g., "Europe/Riga",
         "Australia/Adelaide", "America/Panama").
+    ensemble : boolean 
+        A high resolution single value or 10 cheaper samples
         
     Returns:
     --------
@@ -512,14 +515,26 @@ def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: fl
     openmeteo = openmeteo_requests.Client(session=retry_session)
     
     url = "https://archive-api.open-meteo.com/v1/archive"
-    params = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "start_date": clean_start_date,
-        "end_date": clean_end_date,
-        "timezone": "GMT",
-        "hourly": WEATHER_VARS
-    }
+    
+    if ensemble:
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "start_date": clean_start_date,
+            "end_date": clean_end_date,
+            "timezone": "GMT",
+            "hourly": WEATHER_VARS_ENSEMBLE
+          }
+    
+    else:
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "start_date": clean_start_date,
+            "end_date": clean_end_date,
+            "timezone": "GMT",
+            "hourly": WEATHER_VARS
+          }
 
     responses = openmeteo.weather_api(url, params=params)
     response = responses[0]
