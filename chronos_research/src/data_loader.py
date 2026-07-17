@@ -490,7 +490,7 @@ def fetch_weather(start_date: str, end_date: str, latitude: float, longitude: fl
     latitude : float
         Latitude coordinate of the location (e.g., -34.9287 for Adelaide).
     longitude : float
-        Longitude coordinate of the location (e.g., 138.5986 for Adelaide)..
+        Longitude coordinate of the location (e.g., 138.5986 for Adelaide).
     offset_hours : float, default 0.0
         The number of hours to shift the weather timestamps to align with target data
         (e.g., +10 for AEMO market time when fetching in GMT).
