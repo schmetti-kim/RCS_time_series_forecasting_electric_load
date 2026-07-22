@@ -34,6 +34,7 @@ PAN_COVARIATE_COLS = [
     "Holiday_ID", "holiday", "school"
 ]   
 PAN_START_DATE = "2015-01-04 00:00:00"
+PAN_END_DATE = "2020-01-04 00:00:00"
 PAN_COUNTRY_CODE = "PA"
 
 # ── 0.2. Australia dataset ─────────────────────────────────────────────────────
@@ -878,3 +879,22 @@ def create_population_weighted_weather(weather_df, city_suffixes, populations):
         )
 
     return weighted_df
+
+# ── 4. Processing for Cross-Learning ───────────────────────────────────────────
+def replicate_days(df, target_id: str):
+    """Replicates a base row/subset for 'target_id' across day indices 0 to N_DAYS - 1."""
+    # Extract the base dataframe template
+    base_df = df[df[ID_COLUMN] == target_id].copy()
+
+    # Prefix extraction (e.g., 'AT_day_180' -> 'AT_day_')
+    prefix = target_id.rsplit("_", 1)[0] + "_"
+
+    # Generate a list of DataFrames for day 0 to N_DAYS - 1
+    dfs = []
+    for i in range(N_DAYS):
+        temp_df = base_df.copy()
+        temp_df[ID_COLUMN] = f"{prefix}{i}"
+        dfs.append(temp_df)
+
+    # Concatenate into a single DataFrame
+    return pd.concat(dfs, ignore_index=True)

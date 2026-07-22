@@ -185,3 +185,45 @@ def plot_correlation(correlation_df, save_path : str, cmap="coolwarm", figsize=(
     # 7. Show and close
     plt.show()
     plt.close()
+
+# ── Variable Trajectory Comparison ─────────────────────
+def plot_comparison(df1, df2, column_name, label1='Dataset 1', label2='Dataset 2'):
+    """
+    Plots a time series comparison of a specific column from two dataframes.
+    
+    Parameters:
+    df1 (pd.DataFrame): First dataframe
+    df2 (pd.DataFrame): Second dataframe
+    column_name (str): The name of the column to plot (e.g., 'temperature_2m')
+    label1, label2 (str, optional): Custom labels for the legend
+    """
+    fig, ax = plt.subplots(figsize=(12, 5))
+
+    # 1. Extract and convert x-axis data to datetime
+    if TIMESTAMP_COLUMN:
+        x1 = pd.to_datetime(df1[TIMESTAMP_COLUMN])
+        x2 = pd.to_datetime(df2[TIMESTAMP_COLUMN])
+    else:
+        # Defaults to using the DataFrame index if no date column is provided
+        x1 = pd.to_datetime(df1.index)
+        x2 = pd.to_datetime(df2.index)
+
+    # 2. Plot the data
+    ax.plot(x1, df1[column_name], label=label1, color='#1f77b4', linewidth=1.5)
+    ax.plot(x2, df2[column_name], label=label2, color='#ff7f0e', linewidth=1.5)
+
+    # 3. Format the x-axis dates
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    fig.autofmt_xdate() # Tilts dates to prevent overlapping
+
+    # 4. Labels and styling
+    ax.set_title(f'{column_name} Comparison', fontsize=14, pad=12)
+    ax.set_xlabel('Date', fontsize=11)
+    ax.set_ylabel(column_name, fontsize=11)
+    
+    ax.legend(loc='best')
+    ax.grid(True, linestyle='--', alpha=0.6)
+    plt.tight_layout()
+
+    # 5. Display plot
+    plt.show()
