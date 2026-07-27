@@ -16,9 +16,11 @@ from entsoe import EntsoePandasClient
 import openmeteo_requests
 from pandas.core.arrays import boolean
 import requests_cache
+import requests
 from retry_requests import retry
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from io import StringIO
 import holidays
 
 from config import DATA_DIR, CONTEXT_LENGTH, PREDICTION_LENGTH, N_DAYS, ID_COLUMN, TIMESTAMP_COLUMN, TARGET_COLUMN, WEATHER_VARS, WEATHER_VARS_ENSEMBLE, WEATHER_VARS_FORECAST
@@ -49,7 +51,7 @@ LAT_END_DATE = "2026-01-01"
 LAT_TZ = 'Europe/Riga'
 
 # ── 1. Dataset loading ─────────────────────────────────────────────────────────
-# ── 1.1. Panama dataset ────────────────────────────────────────────────────────
+# ── 1.1.1. Panama dataset ──────────────────────────────────────────────────────
 def pan_load(path: Path = DATA_DIR / "raw" / "continuous_dataset.csv") -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Returns
@@ -61,6 +63,69 @@ def pan_load(path: Path = DATA_DIR / "raw" / "continuous_dataset.csv") -> tuple[
 
     # Forward-fill covariate NaNs
     df = df.ffill()
+
+    return df
+
+# ── 1.1.2. Costa Rica dataset ──────────────────────────────────────────────────
+def download_cence_demand(
+    start,
+    end,
+    resolution=60
+):
+    """
+    Download Costa Rica CENCE demand data.
+
+    Parameters
+    ----------
+    start : str or datetime
+        Start datetime, e.g. "2015-01-04 00:00:00"
+
+    end : str or datetime
+        End datetime, e.g. "2018-01-04 00:00:00"
+
+    resolution : int
+        Resolution in minutes. Supported by CENCE API:
+        15 or 60
+
+    Returns
+    -------
+    pandas.DataFrame
+        Demand data with datetime index
+    """
+
+    # Convert input dates
+    if isinstance(start, str):
+        start = pd.to_datetime(start)
+
+    if isinstance(end, str):
+        end = pd.to_datetime(end)
+
+    # API requires YYYYMMDD
+    inicio = start.strftime("%Y%m%d")
+    fin = end.strftime("%Y%m%d")
+
+    url = ("https://apps.grupoice.com/CenceWeb/data/sen/csv/DemandaMW")
+
+    params = {
+        "intervalo": resolution,
+        "inicio": inicio,
+        "fin": fin
+    }
+
+    response = requests.get(
+        url,
+        params=params,
+        timeout=60
+    )
+
+    response.raise_for_status()
+
+    # Read CSV directly
+    df = pd.read_csv(StringIO(response.text))
+
+    # Inspect columns
+    print("Downloaded columns:")
+    print(df.columns.tolist())
 
     return df
 
@@ -881,6 +946,7 @@ def create_population_weighted_weather(weather_df, city_suffixes, populations):
     return weighted_df
 
 # ── 4. Processing for Cross-Learning ───────────────────────────────────────────
+# ── 4.1. Replicate days across all id's ────────────────────────────────────────
 def replicate_days(df, target_id: str):
     """Replicates a base row/subset for 'target_id' across day indices 0 to N_DAYS - 1."""
     # Extract the base dataframe template
@@ -898,3 +964,77 @@ def replicate_days(df, target_id: str):
 
     # Concatenate into a single DataFrame
     return pd.concat(dfs, ignore_index=True)
+
+# ── 4.2. Remove rows with holiday mismatch ─────────────────────────────────────
+def remove_country_holiday_mismatch(df, keep_country, remove_country):
+    """
+    Remove rows from remove_country when its holiday status differs from keep_country
+    on the same calendar date.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Input dataframe containing:
+        - timestamp : datetime column
+        - id        : identifier starting with country prefix
+        - holiday   : binary holiday indicator
+
+    keep_country : str
+        Country prefix whose rows are always kept.
+
+    remove_country : str
+        Country prefix whose rows are removed on mismatched holiday dates.
+
+    Returns
+    -------
+    df_clean : pandas.DataFrame
+        Cleaned dataframe.
+    """
+
+    df = df.copy()
+
+    # Convert timestamp and extract date
+    df[TIMESTAMP_COLUMN] = pd.to_datetime(df[TIMESTAMP_COLUMN])
+    df['date'] = df[TIMESTAMP_COLUMN].dt.date
+
+    # Extract country/location prefix from id
+    if keep_country.startswith("AUS_") and remove_country.startswith("AUS_"):
+        df['country'] = df[ID_COLUMN].str.extract(r'^(AUS_[^_]+)')[0]
+    else:
+        df['country'] = df[ID_COLUMN].str.split('_').str[0]
+
+    # Compare holiday status between the two countries
+    holiday_check = (
+        df.groupby(['date', 'country'])['holiday']
+        .max()
+        .unstack(fill_value=0)
+    )
+
+    # Find dates where holiday status differs
+    mismatch_dates = holiday_check[
+        holiday_check[keep_country] != holiday_check[remove_country]
+    ].index.tolist()
+
+    print(f"Found {len(mismatch_dates)} mismatched holiday dates.")
+    print(mismatch_dates)
+
+    # Find IDs from remove_country that contain at least one mismatched date
+    ids_to_remove = df.loc[
+        (df['country'] == remove_country) &
+        (df['date'].isin(mismatch_dates)),
+        'id'
+    ].unique()
+
+    # Remove all rows belonging to those IDs
+    df_clean = df[
+        ~df['id'].isin(ids_to_remove)
+    ].copy()
+
+    # Remove helper columns
+    df_clean.drop(columns=['date', 'country'], inplace=True)
+
+    print(f"Original rows: {len(df)}")
+    print(f"Cleaned rows: {len(df_clean)}")
+    print(f"Removed rows: {len(df) - len(df_clean)}")
+
+    return df_clean
