@@ -227,3 +227,86 @@ def plot_comparison(df1, df2, column_name, label1='Dataset 1', label2='Dataset 2
 
     # 5. Display plot
     plt.show()
+
+# ── Covariate Selection Progression Plot ──────────────────────────────────────
+def plot_covariate_selection_progression(
+    result_dfs: list,
+    stage_names: list,
+    save_path: str = None,
+    metric: str = "mean_mape",
+    figsize=(12, 5)
+):
+    """
+    Plots mean MAPE progression across the hierarchical covariate selection process.
+
+    Each stage is displayed sequentially with vertical separators:
+    Group 1 -> Group 2 -> Group 3 -> Group 4 -> Backward Elimination.
+    """
+    # Combine all results
+    plot_df = pd.concat(result_dfs, ignore_index=True)
+
+    # Create sequential model index for plotting
+    plot_df["plot_index"] = range(len(plot_df))
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    ax.plot(
+        plot_df["plot_index"],
+        plot_df[metric],
+        marker="o",
+        markersize=4
+    )
+
+    # Stage boundaries
+    stage_lengths = [len(df) for df in result_dfs]
+
+    cumulative = 0
+    for i, length in enumerate(stage_lengths[:-1]):
+        cumulative += length
+        ax.axvline(
+            cumulative - 0.5,
+            linestyle="--",
+            linewidth=1
+        )
+
+    # Stage labels
+    stage_centers = []
+    cumulative = 0
+
+    for length in stage_lengths:
+        stage_centers.append(cumulative + (length - 1) / 2)
+        cumulative += length
+
+    for center, name in zip(stage_centers, stage_names):
+        ax.text(
+            center,
+            ax.get_ylim()[1],
+            name,
+            ha="center",
+            va="bottom"
+        )
+
+    # Highlight selected configurations if available
+    selected_models = []
+
+    for df in result_dfs:
+        if "mean_mape" in df.columns:
+            selected_models.append(df["mean_mape"].idxmin())
+
+    ax.set_xlabel("Sequential model evaluation index")
+    ax.set_ylabel("Mean MAPE")
+    ax.set_title("Hierarchical Covariate Selection Progression")
+
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(
+            save_path,
+            bbox_inches="tight",
+            dpi=300
+        )
+        print(f"Plot saved to '{save_path}'.")
+
+    plt.show()

@@ -1,0 +1,17 @@
+stage,model,covariates_tested,cumulative_covariates,mean_mape,mean_rmse,num_covariates
+Group 3,M12,(),"('temperature_2m', 'holiday', 'weekend')",3.4582224816315046,49.75537117244639,3
+Group 3,M13,"('dew_point_2m',)","('temperature_2m', 'holiday', 'weekend', 'dew_point_2m')",3.544822524672503,51.077467770263446,4
+Group 3,M14,"('pressure_msl',)","('temperature_2m', 'holiday', 'weekend', 'pressure_msl')",3.57931986379121,51.80953156151401,4
+Group 3,M15,"('wind_speed_10m',)","('temperature_2m', 'holiday', 'weekend', 'wind_speed_10m')",3.5830139997373407,51.6263178659668,4
+Group 3,M16,"('cloud_cover_low',)","('temperature_2m', 'holiday', 'weekend', 'cloud_cover_low')",3.5630358565548814,51.311212796038134,4
+Group 3,M17,"('dew_point_2m', 'pressure_msl')","('temperature_2m', 'holiday', 'weekend', 'dew_point_2m', 'pressure_msl')",3.626315578200006,52.57020739178478,5
+Group 3,M18,"('dew_point_2m', 'wind_speed_10m')","('temperature_2m', 'holiday', 'weekend', 'dew_point_2m', 'wind_speed_10m')",3.6590731651393837,52.87492870464018,5
+Group 3,M19,"('dew_point_2m', 'cloud_cover_low')","('temperature_2m', 'holiday', 'weekend', 'dew_point_2m', 'cloud_cover_low')",3.606188707451451,52.06212859757736,5
+Group 3,M20,"('pressure_msl', 'wind_speed_10m')","('temperature_2m', 'holiday', 'weekend', 'pressure_msl', 'wind_speed_10m')",3.672067904481803,53.16478190667375,5
+Group 3,M21,"('pressure_msl', 'cloud_cover_low')","('temperature_2m', 'holiday', 'weekend', 'pressure_msl', 'cloud_cover_low')",3.6393479756144553,52.65458871937444,5
+Group 3,M22,"('wind_speed_10m', 'cloud_cover_low')","('temperature_2m', 'holiday', 'weekend', 'wind_speed_10m', 'cloud_cover_low')",3.663696440532296,52.78701171124821,5
+Group 3,M23,"('dew_point_2m', 'pressure_msl', 'wind_speed_10m')","('temperature_2m', 'holiday', 'weekend', 'dew_point_2m', 'pressure_msl', 'wind_speed_10m')",3.733890700884388,54.175802494014974,6
+Group 3,M24,"('dew_point_2m', 'pressure_msl', 'cloud_cover_low')","('temperature_2m', 'holiday', 'weekend', 'dew_point_2m', 'pressure_msl', 'cloud_cover_low')",3.6696093387127102,53.203381810250846,6
+Group 3,M25,"('dew_point_2m', 'wind_speed_10m', 'cloud_cover_low')","('temperature_2m', 'holiday', 'weekend', 'dew_point_2m', 'wind_speed_10m', 'cloud_cover_low')",3.705729880952474,53.620114190441164,6
+Group 3,M26,"('pressure_msl', 'wind_speed_10m', 'cloud_cover_low')","('temperature_2m', 'holiday', 'weekend', 'pressure_msl', 'wind_speed_10m', 'cloud_cover_low')",3.7227460162989203,53.89157610969149,6
+Group 3,M27,"('dew_point_2m', 'pressure_msl', 'wind_speed_10m', 'cloud_cover_low')","('temperature_2m', 'holiday', 'weekend', 'dew_point_2m', 'pressure_msl', 'wind_speed_10m', 'cloud_cover_low')",3.7606489132633754,54.5783509888441,7

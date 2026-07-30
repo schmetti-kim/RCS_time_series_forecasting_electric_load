@@ -23,6 +23,44 @@ WEATHER_VARS = [
     ]
 WEATHER_VARS_ENSEMBLE = []
 WEATHER_VARS_FORECAST = []
+DROP_VARS = [
+  "dew_point_2m",
+  "pressure_msl",
+  "wind_speed_10m",
+  "wind_speed_100m",
+  "wind_gusts_10m",
+  "precipitation",
+  "soil_temperature_0_to_7cm",
+  "soil_temperature_7_to_28cm",
+  "soil_moisture_0_to_7cm",
+  "soil_moisture_7_to_28cm",
+  "cloud_cover_low",
+  "cloud_cover_mid",
+  "cloud_cover_high",
+  "dow", "dow_0", "dow_1", "dow_2", 
+  "dow_3", "dow_4", "dow_5", "dow_6", 
+  "dow_sin", "dow_cos"]
+GROUP1_VARS = ["temperature_2m", "holiday", "weekend"]
+ENCODING_CANDIDATES = {
+    "none": [],
+    "integer": ["dow"],
+    "one_hot": [
+        "dow_0", "dow_1", "dow_2", "dow_3",
+        "dow_4", "dow_5", "dow_6",
+    ],
+    "cyclic": ["dow_sin", "dow_cos"],
+}
+GROUP3_VARS = [
+    "dew_point_2m",
+    "pressure_msl",
+    "wind_speed_10m",      # representative wind variable
+    "cloud_cover_low",     # representative cloud variable
+]
+GROUP4_VARS = [
+  "precipitation",
+  "soil_temperature_0_to_7cm",
+  "soil_moisture_0_to_7cm"
+]
 
 # ── Forecasting ────────────────────────────────────────────────────────────────
 CONTEXT_LENGTH = 168

@@ -662,13 +662,22 @@ def add_calendar(df: pd.DataFrame, country_code: str, subdivision: str = None) -
     """
     Adds non-linear seasonal shock components (weekend, holiday) to the dataframe.
     """
+    df = df.copy()
     df[TIMESTAMP_COLUMN] = pd.to_datetime(df[TIMESTAMP_COLUMN])
     
-    # 1. Generate only the weekend shock (0 = weekday, 1 = weekend)
-    df['weekend'] = (df[TIMESTAMP_COLUMN].dt.dayofweek >= 5).astype(int)
-    
-    # 2. Day of week (Monday=0, ..., Sunday=6)
-    df['dow'] = df[TIMESTAMP_COLUMN].dt.dayofweek
+    # 1. Day of week 
+    dow = df[TIMESTAMP_COLUMN].dt.dayofweek
+    df["dow"] = dow.astype(np.int8)
+
+    dummies = pd.get_dummies(dow, prefix="dow", dtype=np.int8)
+    df = pd.concat([df, dummies], axis=1)
+
+    angle = 2 * np.pi * dow / 7
+    df["dow_sin"] = np.sin(angle).astype(np.float32)
+    df["dow_cos"] = np.cos(angle).astype(np.float32)
+
+    # 2. Generate only the weekend shock (0 = weekday, 1 = weekend)
+    df['weekend'] = (dow >= 5).astype(np.int8)
 
     # 3. Extract unique years to fetch correct holiday boundaries dynamically
     years = df[TIMESTAMP_COLUMN].dt.year.unique().tolist()
@@ -681,7 +690,7 @@ def add_calendar(df: pd.DataFrame, country_code: str, subdivision: str = None) -
     )
     
     # 5. Map holiday boolean arrays to numeric binary flags
-    df['holiday'] = df[TIMESTAMP_COLUMN].dt.date.isin(regional_holidays).astype(int)
+    df['holiday'] = df[TIMESTAMP_COLUMN].dt.date.isin(regional_holidays).astype(np.int8)
     
     return df
 

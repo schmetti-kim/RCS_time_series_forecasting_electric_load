@@ -1,0 +1,5 @@
+stage,model,encoding,encoding_covariates,cumulative_covariates,mean_mape,mean_rmse,num_covariates
+Group 2,M8,none,(),"('temperature_2m', 'holiday', 'weekend')",3.4582224816315046,49.75537117244639,3
+Group 2,M9,integer,"('dow',)","('temperature_2m', 'holiday', 'weekend', 'dow')",3.508929177526497,50.380474894993384,4
+Group 2,M10,one_hot,"('dow_0', 'dow_1', 'dow_2', 'dow_3', 'dow_4', 'dow_5', 'dow_6')","('temperature_2m', 'holiday', 'weekend', 'dow_0', 'dow_1', 'dow_2', 'dow_3', 'dow_4', 'dow_5', 'dow_6')",3.6260277971202433,52.16906986393896,10
+Group 2,M11,cyclic,"('dow_sin', 'dow_cos')","('temperature_2m', 'holiday', 'weekend', 'dow_sin', 'dow_cos')",3.573766134058998,51.63497070763555,5

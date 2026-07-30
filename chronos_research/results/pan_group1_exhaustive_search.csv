@@ -1,0 +1,9 @@
+stage,model,covariates_tested,cumulative_covariates,mean_mape,mean_rmse,num_covariates
+Group 1,M0,(),(),3.5475188770548316,51.23218428712968,0
+Group 1,M1,"('temperature_2m',)","('temperature_2m',)",3.5568846202739994,51.60848740013535,1
+Group 1,M2,"('holiday',)","('holiday',)",3.5305715597482448,51.013661841182895,1
+Group 1,M3,"('weekend',)","('weekend',)",3.7184455967135834,53.45884645482695,1
+Group 1,M4,"('temperature_2m', 'holiday')","('temperature_2m', 'holiday')",3.491501369962084,50.537288763748876,2
+Group 1,M5,"('temperature_2m', 'weekend')","('temperature_2m', 'weekend')",3.5898469820802954,51.5781975738083,2
+Group 1,M6,"('holiday', 'weekend')","('holiday', 'weekend')",3.5649911391717977,51.14851582516708,2
+Group 1,M7,"('temperature_2m', 'holiday', 'weekend')","('temperature_2m', 'holiday', 'weekend')",3.4582224816315046,49.75537117244639,3
