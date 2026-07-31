@@ -1,0 +1,9 @@
+stage,model,covariates_tested,cumulative_covariates,mean_mape,mean_rmse,num_covariates
+Group 4,M28,(),"('temperature_2m', 'holiday', 'weekend')",2.6525348235921395,24.855400538612393,3
+Group 4,M29,"('precipitation',)","('temperature_2m', 'holiday', 'weekend', 'precipitation')",2.675224788686818,25.012216086556588,4
+Group 4,M30,"('soil_temperature_0_to_7cm',)","('temperature_2m', 'holiday', 'weekend', 'soil_temperature_0_to_7cm')",2.7005438295962847,25.362398513865585,4
+Group 4,M31,"('soil_moisture_0_to_7cm',)","('temperature_2m', 'holiday', 'weekend', 'soil_moisture_0_to_7cm')",2.7535093146920007,25.767953984094586,4
+Group 4,M32,"('precipitation', 'soil_temperature_0_to_7cm')","('temperature_2m', 'holiday', 'weekend', 'precipitation', 'soil_temperature_0_to_7cm')",2.706584128631607,25.39425919516741,5
+Group 4,M33,"('precipitation', 'soil_moisture_0_to_7cm')","('temperature_2m', 'holiday', 'weekend', 'precipitation', 'soil_moisture_0_to_7cm')",2.7514242340448036,25.75708789668403,5
+Group 4,M34,"('soil_temperature_0_to_7cm', 'soil_moisture_0_to_7cm')","('temperature_2m', 'holiday', 'weekend', 'soil_temperature_0_to_7cm', 'soil_moisture_0_to_7cm')",2.7809538473524213,26.120767169118256,5
+Group 4,M35,"('precipitation', 'soil_temperature_0_to_7cm', 'soil_moisture_0_to_7cm')","('temperature_2m', 'holiday', 'weekend', 'precipitation', 'soil_temperature_0_to_7cm', 'soil_moisture_0_to_7cm')",2.771994796830792,26.039040499994524,6

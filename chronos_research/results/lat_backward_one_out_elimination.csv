@@ -1,0 +1,4 @@
+stage,model,removed_covariate,remaining_covariates,mean_mape,mean_rmse,removable
+Backward One-Out Elimination,M36,temperature_2m,"('holiday', 'weekend')",2.661701363574803,24.80122970163151,False
+Backward One-Out Elimination,M37,holiday,"('temperature_2m', 'weekend')",2.767402129827131,25.91970708482077,False
+Backward One-Out Elimination,M38,weekend,"('temperature_2m', 'holiday')",2.917317522003093,27.478342017207392,False
