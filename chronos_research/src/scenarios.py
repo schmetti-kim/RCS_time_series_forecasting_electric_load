@@ -16,8 +16,7 @@ from itertools import combinations
 
 from config import (
     DATA_DIR, CONTEXT_LENGTH, PREDICTION_LENGTH, QUANTILE_LEVELS, SEED,
-    ID_COLUMN, TIMESTAMP_COLUMN, TARGET_COLUMN, RESULTS_DIR, N_DAYS, GROUP1_VARS, 
-    ENCODING_CANDIDATES
+    ID_COLUMN, TIMESTAMP_COLUMN, TARGET_COLUMN, RESULTS_DIR, N_DAYS
 )
 from metrics import calculate_metrics
 
@@ -224,7 +223,8 @@ def hierarchical_exhaustive_search(
     id_column: str = ID_COLUMN, 
     timestamp_column: str = TIMESTAMP_COLUMN, 
     target_column: str = TARGET_COLUMN,
-    practical_mape_tolerance = 1e-2,
+    practical_mape_tolerance = 1e-3,
+    include_future_covariates: bool = True,
     save_path: str = None
 ) -> tuple[pd.DataFrame, list]:
     """
@@ -256,8 +256,12 @@ def hierarchical_exhaustive_search(
         print(f"Evaluating {model_name} (Covariates: {current_eval_covariates if current_eval_covariates else 'None'})")
         
         context_cols = base_context_cols + current_eval_covariates
-        future_cols = base_future_cols + current_eval_covariates
-        
+
+        if include_future_covariates:
+            future_cols = base_future_cols + current_eval_covariates
+        else:
+            future_cols = base_future_cols + base_covariates
+
         pred_df = s2_predict(
             pipeline=pipeline, 
             context_df=context_df[context_cols], 
@@ -276,6 +280,7 @@ def hierarchical_exhaustive_search(
             "model": model_name,
             "covariates_tested": tuple(subset),
             "cumulative_covariates": tuple(current_eval_covariates),
+            "future_weather_available": include_future_covariates,
             "mean_mape": metrics_df["mape"].mean(),
             "mean_rmse": metrics_df["rmse"].mean(),
             "num_covariates": len(current_eval_covariates)
@@ -331,25 +336,27 @@ def evaluate_diverse_encodings(
     id_column: str = ID_COLUMN,
     timestamp_column: str = TIMESTAMP_COLUMN,
     target_column: str = TARGET_COLUMN,
-    practical_mape_tolerance: float = 1e-2,
+    practical_mape_tolerance: float = 1e-3,
+    include_future_weather: bool = True,
+    weather_covariates: list = None,
     save_path: str = None
 ) -> tuple[pd.DataFrame, pd.Series]:
     """
-    Evaluates alternative day-of-week encodings on top of the selected Group 1
-    configuration. Models whose mean MAPE lies within the specified tolerance
-    of the best-performing model are considered practically equivalent, and
-    the simplest encoding is selected.
+    Evaluates alternative covariate configurations.
+    Models whose mean MAPE lies within the specified tolerance of the best-performing
+    model are considered practically equivalent, and the simplest model is selected.
     """
 
     results = []
 
     base_context_cols = [timestamp_column, target_column, id_column]
     base_future_cols = [timestamp_column, id_column]
+    weather_covariates = weather_covariates or []
 
     print(f"\n--- Running Calendar Encoding Selection for {stage_name} ---")
 
     current_model_idx = start_model_idx
-
+    
     for encoding_name, encoding_covariates in encoding_candidates.items():
 
         model_name = f"M{current_model_idx}"
@@ -362,7 +369,17 @@ def evaluate_diverse_encodings(
         )
 
         context_cols = base_context_cols + current_eval_covariates
-        future_cols = base_future_cols + current_eval_covariates
+        
+        if include_future_weather:
+            future_cols = base_future_cols + current_eval_covariates
+        else:
+            future_cols = (
+                base_future_cols 
+                + [
+                  c for c in current_eval_covariates
+                  if c not in weather_covariates
+                  ]
+            )
 
         pred_df = s2_predict(
             pipeline=pipeline,
@@ -380,8 +397,8 @@ def evaluate_diverse_encodings(
         results.append({
             "stage": stage_name,
             "model": model_name,
-            "encoding": encoding_name,
-            "encoding_covariates": tuple(encoding_covariates),
+            "configuration": encoding_name,
+            "selected_covariates": tuple(encoding_covariates),
             "cumulative_covariates": tuple(current_eval_covariates),
             "mean_mape": metrics_df["mape"].mean(),
             "mean_rmse": metrics_df["rmse"].mean(),
@@ -409,8 +426,8 @@ def evaluate_diverse_encodings(
 
     print(f"\nCalendar encoding selection complete for {stage_name}.")
     print(
-        f"Selected Encoding ({stage_name}*): "
-        f"{best_row['model']} -> {best_row['encoding']}"
+        f"Selected Configuration ({stage_name}*): "
+        f"{best_row['model']} -> {best_row['configuration']}"
     )
     print(f"Best Mean MAPE: {best_row['mean_mape']:.4f}\n")
 
@@ -432,14 +449,14 @@ def backward_one_out_elimination(
     id_column: str = ID_COLUMN,
     timestamp_column: str = TIMESTAMP_COLUMN,
     target_column: str = TARGET_COLUMN,
-    practical_mape_tolerance: float = 1e-2,
+    practical_mape_tolerance: float = 1e-3,
     save_path: str = None,
 ) -> pd.DataFrame:
     """
-    Performs one-out elimination analysis on the selected covariates.
-    Each covariate is removed individually and evaluated. The function
-    identifies covariates whose individual removal does not increase mean
-    MAPE beyond the specified practical tolerance.
+    Evaluates alternative calendar configurations, including
+    holiday/weekend inclusion and day-of-week representations.
+    Models within tolerance of the best-performing model are considered
+    practically equivalent, and the simplest configuration is selected.
     """
 
     selected_covariates = list(selected_covariates)

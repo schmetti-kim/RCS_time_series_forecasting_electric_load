@@ -286,16 +286,27 @@ def plot_covariate_selection_progression(
             va="bottom"
         )
 
-    # Highlight selected configurations if available
-    selected_models = []
-
+    # Highlight selected configurations & horizontal line per stage
+    cumulative = 0
     for df in result_dfs:
-        if "mean_mape" in df.columns:
-            selected_models.append(df["mean_mape"].idxmin())
+        if metric in df.columns:
+            best_local_idx = df[metric].idxmin()
+            best_global_idx = cumulative + best_local_idx
+            best_val = df.loc[best_local_idx, metric]
+
+            start_idx = cumulative
+            end_idx = cumulative + len(df) - 1
+
+            # highlight the point
+            ax.scatter(best_global_idx, best_val, color="red", s=40, zorder=5)
+            # draw a horizontal line going through the point
+            ax.hlines(y=best_val, xmin=start_idx, xmax=end_idx, colors="red", linestyles=":", linewidth=1.2)
+
+        cumulative += len(df)
 
     ax.set_xlabel("Sequential model evaluation index")
     ax.set_ylabel("Mean MAPE")
-    ax.set_title("Hierarchical Covariate Selection Progression")
+    ax.set_title("Hierarchical Covariate Selection Progression", y=1.12)
 
     ax.grid(True, alpha=0.3)
 

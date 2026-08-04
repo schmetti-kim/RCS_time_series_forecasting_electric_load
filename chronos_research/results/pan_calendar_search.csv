@@ -1,0 +1,17 @@
+stage,model,configuration,selected_covariates,cumulative_covariates,mean_mape,mean_rmse,num_covariates
+Calendar Configuration Search,M0,h0_w0_none,(),(),3.5475188770548316,51.23218428712968,0
+Calendar Configuration Search,M1,h0_w0_integer,"('dow',)","('dow',)",3.98867210707618,56.318842257660876,1
+Calendar Configuration Search,M2,h0_w0_one_hot,"('dow_0', 'dow_1', 'dow_2', 'dow_3', 'dow_4', 'dow_5', 'dow_6')","('dow_0', 'dow_1', 'dow_2', 'dow_3', 'dow_4', 'dow_5', 'dow_6')",3.848007190853019,55.400546531170356,7
+Calendar Configuration Search,M3,h0_w0_cyclic,"('dow_sin', 'dow_cos')","('dow_sin', 'dow_cos')",3.8679241617455657,56.31092619656162,2
+Calendar Configuration Search,M4,h0_w1_none,"('weekend',)","('weekend',)",3.7184455967135834,53.45884645482695,1
+Calendar Configuration Search,M5,h0_w1_integer,"('weekend', 'dow')","('weekend', 'dow')",3.8204847147956533,54.78943979389528,2
+Calendar Configuration Search,M6,h0_w1_one_hot,"('weekend', 'dow_0', 'dow_1', 'dow_2', 'dow_3', 'dow_4', 'dow_5', 'dow_6')","('weekend', 'dow_0', 'dow_1', 'dow_2', 'dow_3', 'dow_4', 'dow_5', 'dow_6')",3.8099915766743724,54.59302261303902,8
+Calendar Configuration Search,M7,h0_w1_cyclic,"('weekend', 'dow_sin', 'dow_cos')","('weekend', 'dow_sin', 'dow_cos')",3.8720775090427586,56.01240179302017,3
+Calendar Configuration Search,M8,h1_w0_none,"('holiday',)","('holiday',)",3.5305715597482448,51.013661841182895,1
+Calendar Configuration Search,M9,h1_w0_integer,"('holiday', 'dow')","('holiday', 'dow')",3.7065112120547616,53.047777226612666,2
+Calendar Configuration Search,M10,h1_w0_one_hot,"('holiday', 'dow_0', 'dow_1', 'dow_2', 'dow_3', 'dow_4', 'dow_5', 'dow_6')","('holiday', 'dow_0', 'dow_1', 'dow_2', 'dow_3', 'dow_4', 'dow_5', 'dow_6')",3.836485120932521,55.27992891930589,8
+Calendar Configuration Search,M11,h1_w0_cyclic,"('holiday', 'dow_sin', 'dow_cos')","('holiday', 'dow_sin', 'dow_cos')",3.7353529969552923,54.09991796974548,3
+Calendar Configuration Search,M12,h1_w1_none,"('holiday', 'weekend')","('holiday', 'weekend')",3.5649911391717977,51.14851582516708,2
+Calendar Configuration Search,M13,h1_w1_integer,"('holiday', 'weekend', 'dow')","('holiday', 'weekend', 'dow')",3.6517270078546926,52.209100435634426,3
+Calendar Configuration Search,M14,h1_w1_one_hot,"('holiday', 'weekend', 'dow_0', 'dow_1', 'dow_2', 'dow_3', 'dow_4', 'dow_5', 'dow_6')","('holiday', 'weekend', 'dow_0', 'dow_1', 'dow_2', 'dow_3', 'dow_4', 'dow_5', 'dow_6')",3.8033224408524666,54.53117778361954,9
+Calendar Configuration Search,M15,h1_w1_cyclic,"('holiday', 'weekend', 'dow_sin', 'dow_cos')","('holiday', 'weekend', 'dow_sin', 'dow_cos')",3.7097872107612138,53.29908752579846,4

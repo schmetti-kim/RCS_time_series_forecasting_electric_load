@@ -3,6 +3,7 @@ config.py — Central config for Chronos-2 pipeline.
 """
 
 from pathlib import Path
+from itertools import combinations
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 ROOT_DIR    = Path(__file__).parent.parent  # Goes from src/ up to panama/
@@ -40,27 +41,69 @@ DROP_VARS = [
   "dow", "dow_0", "dow_1", "dow_2", 
   "dow_3", "dow_4", "dow_5", "dow_6", 
   "dow_sin", "dow_cos"]
-GROUP1_VARS = ["temperature_2m", "holiday", "weekend"]
-ENCODING_CANDIDATES = {
-    "none": [],
-    "integer": ["dow"],
-    "one_hot": [
-        "dow_0", "dow_1", "dow_2", "dow_3",
-        "dow_4", "dow_5", "dow_6",
-    ],
-    "cyclic": ["dow_sin", "dow_cos"],
-}
-GROUP3_VARS = [
+
+SELECTED_WEATHER_VARS = [
+    "temperature_2m",
     "dew_point_2m",
     "pressure_msl",
     "wind_speed_10m",      # representative wind variable
     "cloud_cover_low",     # representative cloud variable
 ]
-GROUP4_VARS = [
-  "precipitation",
-  "soil_temperature_0_to_7cm",
-  "soil_moisture_0_to_7cm"
-]
+
+# GROUP1_CANDIDATES = {}
+
+# for holiday in [[], ["holiday"]]:
+#     for weekend in [[], ["weekend"]]:
+#         for dow_name, dow_cols in {
+#             "none": [],
+#             "integer": ["dow"],
+#             "one_hot": [
+#                 "dow_0", "dow_1", "dow_2",
+#                 "dow_3", "dow_4", "dow_5", "dow_6"
+#             ],
+#             "cyclic": ["dow_sin", "dow_cos"]
+#         }.items():
+#             name = f"h{len(holiday)}_w{len(weekend)}_{dow_name}"
+#             GROUP1_CANDIDATES[name] = holiday + weekend + dow_cols
+
+GROUP1_CANDIDATES = {}
+
+candidate_idx = 0
+
+for r in range(len(SELECTED_WEATHER_VARS) + 1):
+    for weather_subset in combinations(SELECTED_WEATHER_VARS, r):
+
+        for holiday in [[], ["holiday"]]:
+            for weekend in [[], ["weekend"]]:
+                for dow_name, dow_cols in {
+                    "none": [],
+                    "integer": ["dow"],
+                    "one_hot": [
+                        "dow_0", "dow_1", "dow_2",
+                        "dow_3", "dow_4", "dow_5", "dow_6"
+                    ],
+                    "cyclic": ["dow_sin", "dow_cos"]
+                }.items():
+
+                    name = (
+                        f"h{len(holiday)}_"
+                        f"w{len(weekend)}_"
+                        f"{dow_name}_"
+                        f"ws_{'_'.join(weather_subset) if weather_subset else 'none'}"
+                    )
+
+                    GROUP1_CANDIDATES[name] = (
+                        holiday
+                        + weekend
+                        + dow_cols
+                        + list(weather_subset)
+                    )
+
+GROUP2_CANDIDATES = {
+    name: covariates
+    for name, covariates in GROUP1_CANDIDATES.items()
+    if any(var in covariates for var in SELECTED_WEATHER_VARS)
+}
 
 # ── Forecasting ────────────────────────────────────────────────────────────────
 CONTEXT_LENGTH = 168
