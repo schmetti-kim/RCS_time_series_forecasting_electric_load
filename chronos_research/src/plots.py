@@ -250,6 +250,10 @@ def plot_covariate_selection_progression(
 
     fig, ax = plt.subplots(figsize=figsize)
 
+    # ── Model 0 Baseline Horizontal Line ───────────────────────────────
+    model_0_val = plot_df.loc[0, metric]
+    ax.axhline(y=model_0_val, color="gray", linestyle="--", alpha=0.7, label="Univariate Baseline")
+
     ax.plot(
         plot_df["plot_index"],
         plot_df[metric],
@@ -288,11 +292,15 @@ def plot_covariate_selection_progression(
 
     # Highlight selected configurations & horizontal line per stage
     cumulative = 0
-    for df in result_dfs:
+    for stage_name, df in zip(stage_names, result_dfs):
         if metric in df.columns:
             best_local_idx = df[metric].idxmin()
             best_global_idx = cumulative + best_local_idx
             best_val = df.loc[best_local_idx, metric]
+            
+            # Print the best configuration and mean_mape for the stage
+            config = df.loc[best_local_idx, "configuration"] if "configuration" in df.columns else "N/A"
+            print(f"[{stage_name}] Best {metric}: {best_val:.4f} | Configuration: {config}")
 
             start_idx = cumulative
             end_idx = cumulative + len(df) - 1
