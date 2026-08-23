@@ -15,3 +15,4 @@ requests-cache>=1.2
 retry-requests>=2.0
 holidays>=0.40
 xgboost>=2.0
+adjustText>=1.1.0

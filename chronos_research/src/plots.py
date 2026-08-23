@@ -9,6 +9,7 @@ import matplotlib.dates as mdates
 import seaborn as sns
 from pathlib import Path
 import scipy.stats as stats
+from adjustText import adjust_text
 from config import RESULTS_DIR, TIMESTAMP_COLUMN, PREDICT_COLUMN
 
 sns.set_theme(style="whitegrid", palette="muted")
@@ -36,7 +37,7 @@ def plot_metrics_boxplots(merged_df):
     )
     axes[0].set_title('RMSE Distribution by Dataset')
     axes[0].set_xlabel('Dataset')
-    axes[0].set_ylabel('RMSE')
+    axes[0].set_ylabel('RMSE (MW)')
     
     # 2. Boxplot for MAPE
     sns.boxplot(
@@ -290,31 +291,47 @@ def plot_covariate_selection_progression(
             va="bottom"
         )
 
-    # Highlight selected configurations & horizontal line per stage
+    # ── Highlight cumulative best configuration & horizontal line ─────
     cumulative = 0
+    running_best_val = float("inf")
+    running_best_global_idx = None
+    running_best_config = None
+
     for stage_name, df in zip(stage_names, result_dfs):
         if metric in df.columns:
-            best_local_idx = df[metric].idxmin()
-            best_global_idx = cumulative + best_local_idx
-            best_val = df.loc[best_local_idx, metric]
+            # 1. Find local best in the current stage
+            local_min_idx = df[metric].idxmin()
+            local_min_val = df.loc[local_min_idx, metric]
             
-            # Print the best configuration and mean_mape for the stage
-            config = df.loc[best_local_idx, "configuration"] if "configuration" in df.columns else "N/A"
-            print(f"[{stage_name}] Best {metric}: {best_val:.4f} | Configuration: {config}")
+            # 2. Update cumulative best if current stage beats previous best
+            if local_min_val < running_best_val:
+                running_best_val = local_min_val
+                running_best_global_idx = cumulative + local_min_idx
+                running_best_config = df.loc[local_min_idx, "configuration"] if "configuration" in df.columns else "N/A"
+
+            print(f"[{stage_name}] Cumulative Best {metric}: {running_best_val:.4f} | Configuration: {running_best_config}")
 
             start_idx = cumulative
             end_idx = cumulative + len(df) - 1
 
-            # highlight the point
-            ax.scatter(best_global_idx, best_val, color="red", s=40, zorder=5)
-            # draw a horizontal line going through the point
-            ax.hlines(y=best_val, xmin=start_idx, xmax=end_idx, colors="red", linestyles=":", linewidth=1.2)
+            # Highlight the cumulative best point seen so far
+            ax.scatter(running_best_global_idx, running_best_val, color="red", s=40, zorder=5)
+
+            # Draw the horizontal line for the current stage at the cumulative best level
+            ax.hlines(
+                y=running_best_val, 
+                xmin=start_idx,      # Use xmin=0 if you prefer the line to extend from the very start
+                xmax=end_idx, 
+                colors="red", 
+                linestyles=":", 
+                linewidth=1.2
+            )
 
         cumulative += len(df)
 
-    ax.set_xlabel("Sequential model evaluation index")
-    ax.set_ylabel("Mean MAPE")
-    ax.set_title("Hierarchical Covariate Selection Progression", y=1.12)
+    ax.set_xlabel("Configuration Index")
+    ax.set_ylabel("Mean MAPE (%)")
+    ax.set_title("Covariate Selection Progression", y=1.12)
 
     ax.grid(True, alpha=0.3)
 
@@ -328,4 +345,215 @@ def plot_covariate_selection_progression(
         )
         print(f"Plot saved to '{save_path}'.")
 
+    plt.show()
+
+# ── Metric Statistics Progression Plot ──────────────────────────────────────
+def plot_metric_progression(
+    merged_table: pd.DataFrame,
+    metric: str = "rmse",
+    stat: str = "mean",
+    mode: str = "indexed",  # Options: 'indexed', 'subplots', 'raw'
+    figsize: tuple = None,
+):
+    """Visualizes metric progression with options to highlight subtle variations.
+
+    Parameters:
+    - merged_table: DataFrame containing summary stats across experiments.
+    - metric: 'rmse' or 'mape'.
+    - stat: 'mean', 'median', or 'variance' / 'var'.
+    - mode:
+        * 'indexed'  : Shows % change relative to Exp 1 (baseline = 0%).
+                       Best for comparing relative trajectory across series on one plot.
+        * 'subplots' : 1x3 faceted grid with independent y-axes.
+                       Best for inspecting exact absolute values per dataset.
+        * 'raw'      : Standard single plot with raw values on a shared axis.
+    - figsize: Optional tuple for figure dimensions.
+    """
+    metric = metric.lower()
+    stat_key = "var" if stat.lower() in ["variance", "var"] else stat.lower()
+
+    if stat_key not in merged_table.index:
+        raise ValueError(
+            f"Stat '{stat}' not in index. Options: {list(merged_table.index)}"
+        )
+
+    experiments = [
+        ("Exp 1 (Uni.)", "{country}_uni_{metric}"),
+        ("Exp 2 (Cov.)", "{country}_cov_{metric}"),
+        ("Exp 3-1 (Cross)", "{country}_s3_{metric}_before_holiday"),
+        ("Exp 3-2 (Cross-H)", "{country}_s3_{metric}"),
+    ]
+    x_labels = [exp[0] for exp in experiments]
+
+    datasets = {
+        "Panama": {"code": "pan", "color": "#1f77b4", "marker": "o"},
+        "Australia": {"code": "aus", "color": "#ff7f0e", "marker": "s"},
+        "Latvia": {"code": "lat", "color": "#2ca02c", "marker": "^"},
+    }
+
+    stat_label = "Variance" if stat_key == "var" else stat.capitalize()
+    metric_label = metric.upper()
+
+    # Extract data matrix: shape (3 datasets, 4 experiments)
+    data = {}
+    for name, info in datasets.items():
+        cols = [
+            exp[1].format(country=info["code"], metric=metric)
+            for exp in experiments
+        ]
+        data[name] = merged_table.loc[stat_key, cols].values.astype(float)
+
+    # ---------------------------------------------------------
+    # MODE 1: Indexed (% Change from Baseline)
+    # ---------------------------------------------------------
+    if mode == "indexed":
+        fig, ax = plt.subplots(figsize=figsize or (9, 5))
+        ax.axhline(0, color="gray", linestyle=":", linewidth=1.2, alpha=0.8)
+
+        texts = []
+        for name, values in data.items():
+            baseline = values[0]
+            pct_change = (
+                (values - baseline) / baseline
+            ) * 100  # % change relative to Exp 1
+
+            ax.plot(
+                x_labels,
+                pct_change,
+                label=name,
+                linewidth=1,
+                markersize=2,
+                color=datasets[name]["color"],
+                marker=datasets[name]["marker"],
+            )
+
+            # Direct value annotations to see subtle differences
+            # Inside the datasets loop:
+            for x, y, raw in zip(x_labels, pct_change, values):
+                txt = ax.text(
+                    x,
+                    y,
+                    f"{raw:.2f}\n({y:+.1f}%)",
+                    fontsize=8.5,
+                    color=datasets[name]["color"],
+                    weight="semibold",
+                    ha="center",
+                    va="center",
+                )
+                texts.append(txt)
+
+        adjust_text(texts, ax=ax, autoalign="y", only_move={"text": "y"})
+
+        ax.set_title(
+            f"Relative {stat_label} {metric_label} Change vs. Univariate (Exp 1 = 0%)",
+            fontsize=12,
+            pad=14,
+        )
+        ax.set_ylabel(
+            f"% Change in {stat_label} {metric_label}",
+            fontsize=10.5,
+            labelpad=8,
+        )
+        ax.grid(True, linestyle="--", alpha=0.5)
+        ax.legend(title="Dataset", frameon=True, loc="best")
+
+        # Give breathing room for annotations
+        y_min, y_max = ax.get_ylim()
+        ax.set_ylim(
+            y_min - abs(y_min) * 0.2 - 2, y_max + max(abs(y_max) * 0.2, 5)
+        )
+
+    # ---------------------------------------------------------
+    # MODE 2: Independent Subplots (Faceting)
+    # ---------------------------------------------------------
+    elif mode == "subplots":
+        fig, axes = plt.subplots(1, 3, figsize=figsize or (15, 4.5), sharex=True)
+
+        for ax, (name, values) in zip(axes, data.items()):
+            color = datasets[name]["color"]
+            marker = datasets[name]["marker"]
+
+            ax.plot(
+                x_labels,
+                values,
+                label=name,
+                linewidth=1,
+                markersize=2,
+                color=color,
+                marker=marker,
+            )
+
+            for x, y in zip(x_labels, values):
+                ax.annotate(
+                    f"{y:.2f}",
+                    (x, y),
+                    textcoords="offset points",
+                    xytext=(0, 7),
+                    ha="center",
+                    fontsize=9,
+                    weight="bold",
+                )
+
+            ax.set_title(f"{name}", fontsize=11, weight="bold")
+            ax.set_ylabel(f"{stat_label} {metric_label}", fontsize=9.5)
+            ax.grid(True, linestyle="--", alpha=0.5)
+            ax.tick_params(axis="x", rotation=15)
+
+            # Expand y-limits slightly to prevent text clipping
+            y_span = values.max() - values.min()
+            pad = (
+                y_span * 0.35 if y_span > 0 else values.mean() * 0.05
+            )  # prevent flat-line crash
+            ax.set_ylim(values.min() - pad, values.max() + pad)
+
+        fig.suptitle(
+            f"{stat_label} {metric_label} Progression (Independent Y-Axes)",
+            fontsize=13,
+            y=1.03,
+        )
+
+    # ---------------------------------------------------------
+    # MODE 3: Raw
+    # ---------------------------------------------------------
+    else:
+        fig, ax = plt.subplots(figsize=figsize or (8, 5))
+
+        texts = []
+        for name, values in data.items():
+            ax.plot(
+                x_labels,
+                values,
+                label=name,
+                linewidth=1,
+                markersize=2,
+                color=datasets[name]["color"],
+                marker=datasets[name]["marker"],
+            )
+
+            # Inside the datasets loop:
+            for x, y in zip(x_labels, values):
+                txt = ax.text(
+                    x,
+                    y,
+                    f"{y:.2f}",
+                    fontsize=8.5,
+                    color=datasets[name]["color"],
+                    ha="center",
+                    va="center",
+                )
+                texts.append(txt)
+
+        # Right after the datasets loop finishes (before ax.set_title):
+        adjust_text(texts, ax=ax, autoalign="y", only_move={"text": "y"})
+
+        ax.set_title(
+            f"{stat_label} {metric_label} Progression across Experiments",
+            fontsize=12,
+            pad=12,
+        )
+        ax.set_ylabel(f"{stat_label} {metric_label}", fontsize=10.5)
+        ax.grid(True, linestyle="--", alpha=0.6)
+        ax.legend(title="Dataset", frameon=True)
+
+    plt.tight_layout()
     plt.show()
