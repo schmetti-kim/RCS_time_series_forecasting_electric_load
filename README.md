@@ -48,16 +48,16 @@ Current Progress:
 ## Error Progression Across Experiments
 
 **Mean RMSE**
-![Relative Mean RMSE Change vs. Univariate](data/Images/mean_rmse.png)
+![Relative Mean RMSE Change vs. Univariate](chronos_research/data/Images/mean_rmse.png)
 
 **Variance RMSE**
-![Relative Variance RMSE Change vs. Univariate](data/Images/variance_rmse.png)
+![Relative Variance RMSE Change vs. Univariate](chronos_research/data/Images/variance_rmse.png)
 
 **Mean MAPE**
-![Relative Mean MAPE Change vs. Univariate](data/Images/mean_mape.png)
+![Relative Mean MAPE Change vs. Univariate](chronos_research/data/Images/mean_mape.png)
 
 **Variance MAPE**
-![Relative Variance MAPE Change vs. Univariate](data/Images/variance_mape.png)
+![Relative Variance MAPE Change vs. Univariate](chronos_research/data/Images/variance_mape.png)
 
 | Dataset | Mean RMSE | Variance RMSE | Mean MAPE | Variance MAPE |
 |---|---|---|---|---|
